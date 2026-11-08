@@ -1,0 +1,26 @@
+<main class="workspace">
+  <header class="topbar">
+    <a class="wordmark" href="/">Household finances</a>
+    <span class="environment">Local development</span>
+  </header>
+
+  <section class="readiness" aria-labelledby="page-title">
+    <p class="eyebrow">APPLICATION FOUNDATION</p>
+    <h1 id="page-title">Your household workspace</h1>
+    <p class="description">The development environment is ready to build on.</p>
+    <div class="api-status" role="status" aria-live="polite">
+      <span class="status-indicator" [attr.data-state]="apiStatus()"></span>
+      @switch (apiStatus()) {
+        @case ('online') { <span>API connected</span> }
+        @case ('offline') { <span>API unavailable</span> }
+        @default { <span>Checking API</span> }
+      }
+    </div>
+  </section>
+
+  <footer class="system-line">
+    <span>Angular frontend</span>
+    <span>FastAPI service</span>
+    <span>PostgreSQL storage</span>
+  </footer>
+</main>

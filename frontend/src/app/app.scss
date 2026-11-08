@@ -1,0 +1,126 @@
+:host {
+	display: block;
+	min-height: 100vh;
+}
+
+.workspace {
+	display: flex;
+	min-height: 100vh;
+	flex-direction: column;
+	padding: 0 clamp(1.25rem, 5vw, 5rem);
+	background-color: #f3f6f2;
+	background-image: linear-gradient(rgba(44, 71, 61, 0.045) 1px, transparent 1px),
+		linear-gradient(90deg, rgba(44, 71, 61, 0.045) 1px, transparent 1px);
+	background-size: 32px 32px;
+}
+
+.topbar,
+.system-line {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	border-bottom: 1px solid #d5ded6;
+	min-height: 4.5rem;
+}
+
+.wordmark {
+	color: #233b32;
+	font-size: 1rem;
+	font-weight: 700;
+	text-decoration: none;
+}
+
+.environment,
+.eyebrow,
+.system-line {
+	color: #587168;
+	font-size: 0.75rem;
+	font-weight: 600;
+}
+
+.environment,
+.eyebrow {
+	letter-spacing: 0.08em;
+}
+
+.readiness {
+	width: min(100%, 56rem);
+	margin: auto;
+	padding: 5rem 0;
+}
+
+.eyebrow {
+	margin: 0 0 1.25rem;
+	color: #a45b35;
+}
+
+h1 {
+	max-width: 13ch;
+	margin: 0;
+	color: #20352d;
+	font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+	font-size: 3.25rem;
+	font-weight: 500;
+	line-height: 1.05;
+}
+
+.description {
+	max-width: 38rem;
+	margin: 1.5rem 0 2rem;
+	color: #50635c;
+	font-size: 1.05rem;
+	line-height: 1.6;
+}
+
+.api-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.65rem;
+	min-height: 2.5rem;
+	color: #263d33;
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+.status-indicator {
+	width: 0.65rem;
+	aspect-ratio: 1;
+	border-radius: 50%;
+	background: #c28a31;
+}
+
+.status-indicator[data-state="online"] {
+	background: #2e7955;
+}
+
+.status-indicator[data-state="offline"] {
+	background: #b94b3d;
+}
+
+.system-line {
+	flex-wrap: wrap;
+	justify-content: flex-start;
+	gap: 0.75rem 2rem;
+	border-top: 1px solid #d5ded6;
+	border-bottom: 0;
+	min-height: 4rem;
+	letter-spacing: 0;
+}
+
+@media (max-width: 38rem) {
+	h1 {
+		font-size: 2.5rem;
+	}
+
+	.topbar {
+		min-height: 4rem;
+	}
+
+	.environment {
+		font-size: 0.65rem;
+	}
+
+	.readiness {
+		padding: 3.5rem 0;
+	}
+}
