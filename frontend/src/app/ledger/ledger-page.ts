@@ -27,6 +27,10 @@ export class LedgerPage implements OnInit {
   protected readonly month = signal(toMonth(new Date()));
   protected readonly monthLabel = computed(() => formatMonth(this.month()));
   protected readonly ledger = signal<MonthLedger | null>(null);
+  protected readonly visibleLedger = computed(() => {
+    const ledger = this.ledger();
+    return ledger?.summary.month === this.month() ? ledger : null;
+  });
   protected readonly loadError = signal<string | null>(null);
 
   constructor() {

@@ -25,7 +25,7 @@
     </div>
   }
 
-  @if (ledger(); as data) {
+  @if (visibleLedger(); as data) {
     <dl class="summary">
       <div class="figure">
         <dt>Combined income</dt>
@@ -45,11 +45,7 @@
       <section class="panel" aria-labelledby="income-title">
         <h2 id="income-title">Income</h2>
         @for (income of data.summary.incomes; track income.member_id + ':' + month()) {
-          <app-partner-income
-            [income]="income"
-            [month]="data.summary.month"
-            (changed)="reload()"
-          />
+          <app-partner-income [income]="income" [month]="data.summary.month" (changed)="reload()" />
         }
       </section>
 

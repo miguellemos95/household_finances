@@ -12,9 +12,15 @@
     <div class="api-status" role="status" aria-live="polite">
       <span class="status-indicator" [attr.data-state]="apiStatus()"></span>
       @switch (apiStatus()) {
-        @case ('online') { <span>API connected</span> }
-        @case ('offline') { <span>API unavailable</span> }
-        @default { <span>Checking API</span> }
+        @case ('online') {
+          <span>API connected</span>
+        }
+        @case ('offline') {
+          <span>API unavailable</span>
+        }
+        @default {
+          <span>Checking API</span>
+        }
       }
     </div>
     <span>Angular frontend</span>

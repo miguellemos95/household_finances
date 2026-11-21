@@ -1,106 +1,106 @@
 * {
-	box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 html,
 body {
-	min-height: 100%;
-	margin: 0;
+  min-height: 100%;
+  margin: 0;
 }
 
 body {
-	color: #20352d;
-	font-family: "Aptos", "Segoe UI", sans-serif;
+  color: #20352d;
+  font-family: 'Aptos', 'Segoe UI', sans-serif;
 }
 
 input,
 select,
 button {
-	font: inherit;
+  font: inherit;
 }
 
 .visually-hidden {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	overflow: hidden;
-	clip-path: inset(50%);
-	white-space: nowrap;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .field {
-	display: grid;
-	gap: 0.35rem;
+  display: grid;
+  gap: 0.35rem;
 }
 
 .field label {
-	color: #50635c;
-	font-size: 0.8rem;
-	font-weight: 600;
+  color: #50635c;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .field input,
 .field select,
 .inline-form > input {
-	width: 100%;
-	min-height: 2.5rem;
-	padding: 0 0.7rem;
-	border: 1px solid #b9c6bc;
-	border-radius: 0.4rem;
-	background: #fff;
-	color: #20352d;
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0 0.7rem;
+  border: 1px solid #b9c6bc;
+  border-radius: 0.4rem;
+  background: #fff;
+  color: #20352d;
 }
 
 .field-error {
-	margin: 0;
-	color: #a13d30;
-	font-size: 0.8rem;
+  margin: 0;
+  color: #a13d30;
+  font-size: 0.8rem;
 }
 
 .button {
-	min-height: 2.5rem;
-	padding: 0 1rem;
-	border: 1px solid #2c473d;
-	border-radius: 0.4rem;
-	background: #2c473d;
-	color: #fff;
-	font-weight: 600;
-	cursor: pointer;
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border: 1px solid #2c473d;
+  border-radius: 0.4rem;
+  background: #2c473d;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .button:disabled {
-	cursor: progress;
-	opacity: 0.6;
+  cursor: progress;
+  opacity: 0.6;
 }
 
 .button-quiet {
-	border-color: #b9c6bc;
-	background: #fff;
-	color: #2c473d;
+  border-color: #b9c6bc;
+  background: #fff;
+  color: #2c473d;
 }
 
 input:focus-visible,
 select:focus-visible,
 button:focus-visible {
-	outline: 2px solid #a45b35;
-	outline-offset: 2px;
+  outline: 2px solid #a45b35;
+  outline-offset: 2px;
 }
 
 .notice {
-	margin: 0;
-	padding: 0.7rem 0.9rem;
-	border-radius: 0.4rem;
-	font-size: 0.9rem;
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.4rem;
+  font-size: 0.9rem;
 }
 
 .notice-error {
-	border: 1px solid #e3b9b2;
-	background: #fbeeec;
-	color: #8a2f24;
+  border: 1px solid #e3b9b2;
+  background: #fbeeec;
+  color: #8a2f24;
 }
 
 .notice-success {
-	border: 1px solid #b7d6c5;
-	background: #edf6f1;
-	color: #1f5f41;
+  border: 1px solid #b7d6c5;
+  background: #edf6f1;
+  color: #1f5f41;
 }

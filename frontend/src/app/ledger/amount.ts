@@ -2,7 +2,8 @@ import { ValidatorFn } from '@angular/forms';
 
 const AMOUNT_PATTERN = /^\d{1,10}(\.\d{1,2})?$/;
 
-export const AMOUNT_HINT = 'Enter an amount greater than 0 with up to 2 decimals, for example 12.50.';
+export const AMOUNT_HINT =
+  'Enter an amount greater than 0 with up to 2 decimals, for example 12.50.';
 
 // Amounts stay as text end to end so no binary floating point touches a money value.
 export function parseAmount(value: string): string | null {

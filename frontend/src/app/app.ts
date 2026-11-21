@@ -6,7 +6,7 @@ import { HealthApi } from './health-api';
   selector: 'app-root',
   imports: [RouterOutlet],
   templateUrl: './app-status.html',
-  styleUrl: './app.scss'
+  styleUrl: './app.scss',
 })
 export class App implements OnInit {
   private readonly healthApi = inject(HealthApi);
@@ -15,7 +15,7 @@ export class App implements OnInit {
   ngOnInit(): void {
     this.healthApi.checkLive().subscribe({
       next: () => this.apiStatus.set('online'),
-      error: () => this.apiStatus.set('offline')
+      error: () => this.apiStatus.set('offline'),
     });
   }
 }

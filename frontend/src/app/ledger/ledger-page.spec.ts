@@ -101,7 +101,9 @@ describe('LedgerPage', () => {
   }
 
   function submitFormOf(selector: string): void {
-    element(selector).closest('form')?.dispatchEvent(new Event('submit', { cancelable: true }));
+    element(selector)
+      .closest('form')
+      ?.dispatchEvent(new Event('submit', { cancelable: true }));
     fixture.detectChanges();
   }
 
@@ -142,6 +144,10 @@ describe('LedgerPage', () => {
     flushLedger();
 
     clickButton('Next');
+    expect(page.querySelector('.summary')).toBeNull();
+    expect(page.textContent).not.toContain('€4,041.14');
+    expect(page.textContent).toContain('Loading the ledger…');
+
     flushLedger(
       '2025-12',
       summary({ month: '2025-12', total_expenses: '0.00', balance: '4053.50' }),
