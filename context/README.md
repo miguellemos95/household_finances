@@ -4,7 +4,7 @@ This directory is the authoritative, version-controlled project context.
 
 ## Status
 
-Project rules registered at the user's request. Household requirements and initial architecture are documented. GitHub issues #1-#4 are registered; the user explicitly authorized creating them and beginning with #1. Issue #1 is completed and closed; local app/API checks and PostgreSQL container integration pass. Issue #2 is implemented and verified on the `issue-2-expense-income-ledger` branch and stays open until its pull request is reviewed and merged. Remaining product decisions are deferred to the relevant feature tickets.
+Project rules registered at the user's request. Household requirements and initial architecture are documented. GitHub issues #1-#4 are registered; the user explicitly authorized creating them and beginning with #1. Issue #1 is completed and closed; local app/API checks and PostgreSQL container integration pass. Issue #2 is complete and closed after PR [#6](https://github.com/miguellemos95/household_finances/pull/6) merged on 2026-11-21 and its acceptance criteria were verified. Remaining product decisions are deferred to the relevant feature tickets.
 
 ## Confirmed Goal and Constraints
 
@@ -40,7 +40,7 @@ Feature-level requirements are tracked in [Personal Expense Tracking](personal-e
 
 | Feature / use case | Status | Ticket |
 | --- | --- | --- |
-| [Personal expense tracking](personal-expense-tracking.md) | Issues #1-#4 registered; #1 completed; #2 implemented, pull request pending review | [#1](https://github.com/miguellemos95/household_finances/issues/1), [#2](https://github.com/miguellemos95/household_finances/issues/2), [#3](https://github.com/miguellemos95/household_finances/issues/3), [#4](https://github.com/miguellemos95/household_finances/issues/4) |
+| [Personal expense tracking](personal-expense-tracking.md) | Issues #1-#4 registered; #1 and #2 completed and closed; #2 merged in PR #6 | [#1](https://github.com/miguellemos95/household_finances/issues/1), [#2](https://github.com/miguellemos95/household_finances/issues/2), [#3](https://github.com/miguellemos95/household_finances/issues/3), [#4](https://github.com/miguellemos95/household_finances/issues/4) |
 
 Each future feature/use-case document must capture:
 
