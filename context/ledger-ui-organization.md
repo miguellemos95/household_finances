@@ -2,7 +2,8 @@
 
 ## Status
 
-Dialog close and browser-navigation changes locally verified; ready for review.
+PR [#17](https://github.com/miguellemos95/household_finances/pull/17) merged;
+issue #15 closed after post-merge verification.
 
 **Ticket:** [#15](https://github.com/miguellemos95/household_finances/issues/15).
 
@@ -104,7 +105,7 @@ failover is out of scope.
 | UI-09 | AC3, AC7 | End-to-end | Live API/database integration after UI change | Existing operations work with live services | Not run | Not run | Frontend-only change; mock API used |
 | UI-10 | AC8 | Angular | Fire `beforeunload` for edited, unchanged, reverted and closed dialogs, and edits outside dialogs | Request warning only for edited open dialogs | Matched for both dialog types | Passed | `ledger-page.spec.ts`: leave-page warning cases |
 | UI-11 | AC2, AC8 | Browser | Refresh an edited expense, navigate away with an edited bill, close an edited dialog, and refresh after non-dialog edits | Browser warning for edited dialogs; immediate discard on close; no warning for other edits | Warning appeared on refresh and navigation; other checks matched | Passed | Playwright browser checks with mocked API |
-| UI-12 | AC8 | Browser | Cancel the browser leave-page warning | Stay on page with the draft intact | Not verified: browser tooling automatically resolved the warning | Blocked | Playwright browser check |
+| UI-12 | AC8 | Browser | Cancel the browser refresh warning | Stay on page with the draft intact | Open dialog and draft retained | Passed | Independent Chrome DevTools check with mocked API |
 
 Initial test and build commands were run from the workspace parent and failed
 with missing `package.json`; rerunning from `frontend/` passed. The first modal
@@ -112,5 +113,6 @@ test run failed because the old tests expected expandable forms and jsdom lacks
 dialog methods; updated tests passed. Browser checks exposed an Escape-key issue,
 which was fixed and rechecked. An initial mock setup also timed out before its
 test interception was corrected. The automated browser resolved a later
-leave-page warning before cancellation could be verified; the warning itself
-was observed.
+leave-page warning before cancellation could be verified. An independent Chrome
+DevTools check subsequently verified cancellation successfully. After the
+merge, the frontend suite again passed all 56 tests against the merged files.

@@ -40,7 +40,6 @@ interface BillDraft {
   recurrence: string;
   dueDate: string;
   amount: string;
-  category: string;
   subcategory: string;
 }
 
@@ -71,7 +70,6 @@ export class LedgerPage implements OnInit {
   @ViewChild('billRecurrence') private billRecurrence?: ElementRef<HTMLSelectElement>;
   @ViewChild('billDueDate') private billDueDate?: ElementRef<HTMLInputElement>;
   @ViewChild('billAmount') private billAmount?: ElementRef<HTMLInputElement>;
-  @ViewChild('billCategory') private billCategory?: ElementRef<HTMLSelectElement>;
   @ViewChild('billSubcategory') private billSubcategory?: ElementRef<HTMLSelectElement>;
   @ViewChildren('budgetInput') private budgetInputs!: QueryList<ElementRef<HTMLInputElement>>;
   @ViewChildren('billAmountInput') private billAmountInputs!: QueryList<
@@ -101,13 +99,10 @@ export class LedgerPage implements OnInit {
   protected readonly budgetSaved = signal(false);
   protected readonly billError = signal<string | null>(null);
   protected readonly billSaved = signal(false);
-  protected readonly billCategoryId = signal<number | null>(null);
-  protected readonly billSubcategoryId = signal<number | null>(null);
-  protected readonly billSubcategories = computed(
-    () =>
-      this.visibleLedger()?.categories.find((category) => category.id === this.billCategoryId())
-        ?.subcategories ?? [],
+  protected readonly billCategory = computed(() =>
+    this.visibleLedger()?.categories.find((category) => category.is_bill_category),
   );
+  protected readonly billSubcategories = computed(() => this.billCategory()?.subcategories ?? []);
   protected readonly today = toIsoDate(new Date());
 
   constructor() {
@@ -167,8 +162,6 @@ export class LedgerPage implements OnInit {
     if (month !== this.month()) {
       this.expenseSaved.set(false);
       this.billDraftBaseline = this.emptyBillDraft();
-      this.billCategoryId.set(null);
-      this.billSubcategoryId.set(null);
     }
     this.month.set(month);
     this.reload();
@@ -212,7 +205,7 @@ export class LedgerPage implements OnInit {
   }
 
   private emptyBillDraft(): BillDraft {
-    return { recurrence: 'one_off', dueDate: '', amount: '', category: '0', subcategory: '' };
+    return { recurrence: 'one_off', dueDate: '', amount: '', subcategory: '' };
   }
 
   private currentBillDraft(): BillDraft {
@@ -220,15 +213,12 @@ export class LedgerPage implements OnInit {
       recurrence: this.billRecurrence?.nativeElement.value ?? 'one_off',
       dueDate: this.billDueDate?.nativeElement.value ?? '',
       amount: this.billAmount?.nativeElement.value ?? '',
-      category: this.billCategory?.nativeElement.value ?? '0',
       subcategory: this.billSubcategory?.nativeElement.value ?? '',
     };
   }
 
   private resetBillEntry(): void {
     this.billCreateForm?.nativeElement.reset();
-    this.billCategoryId.set(null);
-    this.billSubcategoryId.set(null);
     this.billDraftBaseline = this.emptyBillDraft();
     this.billError.set(null);
   }
@@ -239,7 +229,6 @@ export class LedgerPage implements OnInit {
       bill.recurrence !== this.billDraftBaseline.recurrence ||
       bill.dueDate !== this.billDraftBaseline.dueDate ||
       bill.amount !== this.billDraftBaseline.amount ||
-      bill.category !== this.billDraftBaseline.category ||
       bill.subcategory !== this.billDraftBaseline.subcategory
     );
   }
@@ -306,30 +295,27 @@ export class LedgerPage implements OnInit {
     return Math.min(Number(budget.percent), 100);
   }
 
-  protected selectBillCategory(value: string): void {
-    this.billCategoryId.set(Number(value) || null);
-    this.billSubcategoryId.set(null);
-  }
-
-  protected selectBillSubcategory(value: string): void {
-    this.billSubcategoryId.set(Number(value) || null);
-  }
-
   protected recordBill(
     recurrence: HTMLSelectElement,
     dueDate: HTMLInputElement,
     amount: HTMLInputElement,
-    category: HTMLSelectElement,
+    subcategory: HTMLSelectElement,
   ): void {
     const parsedAmount = amount.value.trim().replace(',', '.');
-    const categoryId = Number(category.value);
+    const category = this.billCategory();
+    const subcategoryId = Number(subcategory.value);
+    if (!category || this.billSubcategories().length === 0) {
+      this.billError.set('Bill categories are unavailable. Reload the ledger and try again.');
+      this.billSaved.set(false);
+      return;
+    }
     if (
       !dueDate.value ||
       !/^\d+(?:\.\d{1,2})?$/.test(parsedAmount) ||
       Number(parsedAmount) <= 0 ||
-      categoryId <= 0
+      !this.billSubcategories().some((item) => item.id === subcategoryId)
     ) {
-      this.billError.set('Enter a due date, an amount greater than 0 and a category.');
+      this.billError.set('Enter a due date, an amount greater than 0 and a bill category.');
       this.billSaved.set(false);
       return;
     }
@@ -339,8 +325,8 @@ export class LedgerPage implements OnInit {
         recurrence: recurrence.value as 'one_off' | 'monthly',
         due_date: dueDate.value,
         amount: parsedAmount,
-        category_id: categoryId,
-        subcategory_id: this.billSubcategoryId(),
+        category_id: category.id,
+        subcategory_id: subcategoryId,
       })
       .pipe(finalize(() => this.billSaving.set(false)))
       .subscribe({

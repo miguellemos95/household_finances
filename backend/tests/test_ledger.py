@@ -2,18 +2,21 @@ from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import date
+from decimal import Decimal
 from threading import Barrier
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
 from httpx import Response
-from sqlalchemy import Engine, event
+from sqlalchemy import Engine, event, func, select
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from api_client import send
 from app.config import Settings
 from app.main import create_app
+from app.models import Category, Expense, Subcategory
 
 Api = Callable[..., Response]
 
@@ -117,6 +120,9 @@ def test_categories_match_workbook_without_groceries_subcategories(api: Api) -> 
         (category["name"], [item["name"] for item in category["subcategories"]])
         for category in response.json()
     ] == WORKBOOK_CATEGORIES
+    assert [
+        category["name"] for category in response.json() if category["is_bill_category"]
+    ] == ["Bills"]
 
 
 def test_members_have_default_labels(api: Api) -> None:
@@ -158,22 +164,66 @@ def test_unknown_member_cannot_be_renamed(api: Api) -> None:
 
 
 def test_expense_is_recorded_with_category_and_subcategory(api: Api) -> None:
-    response = record_expense(api, "2025-11-03", "12.36", "Bills", "Home Internet")
+    response = record_expense(api, "2025-11-03", "12.36", "Beauty", "Hair")
 
     assert response.status_code == 201
     expense = response.json()
     assert expense["transaction_date"] == "2025-11-03"
     assert expense["amount"] == "12.36"
-    assert expense["category"]["name"] == "Bills"
-    assert expense["subcategory"]["name"] == "Home Internet"
+    assert expense["category"]["name"] == "Beauty"
+    assert expense["subcategory"]["name"] == "Hair"
     assert read_month(api, "/expenses", "2025-11") == [expense]
 
 
-def test_expense_subcategory_is_optional(api: Api) -> None:
-    response = record_expense(api, "2025-11-03", "30.33", "Bills")
+@pytest.mark.parametrize("category", ["Groceries", "Clothes"])
+def test_expense_without_subcategories_does_not_require_one(api: Api, category: str) -> None:
+    response = record_expense(api, "2025-11-03", "30.33", category)
 
     assert response.status_code == 201
     assert response.json()["subcategory"] is None
+
+
+@pytest.mark.parametrize("category", ["Beauty", "Transports", "Eat out"])
+def test_expense_requires_subcategory_when_category_has_one(api: Api, category: str) -> None:
+    response = record_expense(api, "2025-11-03", "30.33", category)
+
+    assert_invalid(response, "subcategory_id")
+    assert read_month(api, "/expenses", "2025-11") == []
+
+
+def test_manual_expense_cannot_use_bills(api: Api) -> None:
+    response = record_expense(api, "2025-11-03", "30.33", "Bills", "Water")
+
+    assert_invalid(response, "category_id")
+    assert read_month(api, "/summary", "2025-11")["total_expenses"] == "0.00"
+
+
+def test_historical_bills_expense_is_hidden_but_included_in_totals(
+    api: Api, ledger_app: FastAPI
+) -> None:
+    with Session(ledger_app.state.database_engine) as session:
+        category = session.scalar(select(Category).where(Category.name == "Bills"))
+        assert category is not None
+        session.add(Expense(
+            transaction_date=date(2025, 11, 3),
+            amount=Decimal("30.33"),
+            category_id=category.id,
+        ))
+        session.commit()
+
+    assert record_expense(api, "2025-11-04", "12.00", "Groceries").status_code == 201
+    expenses = read_month(api, "/expenses", "2025-11")
+    assert len(expenses) == 1
+    assert expenses[0]["category"]["name"] == "Groceries"
+    summary = read_month(api, "/summary", "2025-11")
+    assert summary["total_expenses"] == "42.33"
+    assert summary["balance"] == "-42.33"
+    bills_budget = next(
+        item for item in summary["category_budgets"] if item["category"]["name"] == "Bills"
+    )
+    assert bills_budget["spent"] == "30.33"
+    with Session(ledger_app.state.database_engine) as session:
+        assert session.scalar(select(func.count(Expense.id))) == 2
 
 
 def test_expense_dated_today_is_accepted(api: Api) -> None:
@@ -226,7 +276,7 @@ def test_invalid_expense_is_rejected_and_not_stored(api: Api, overrides: dict, f
     payload = {
         "transaction_date": "2025-11-05",
         "amount": "10.00",
-        **category_reference(api, "Bills", "Water"),
+        **category_reference(api, "Beauty", "Hair"),
         **overrides,
     }
 
@@ -314,9 +364,21 @@ def test_invalid_income_is_rejected_and_not_stored(api: Api, overrides: dict, fi
     assert read_month(api, "/incomes", "2025-11") == []
 
 
-def test_summary_keeps_partner_incomes_separate_and_combines_totals(api: Api) -> None:
+def test_summary_keeps_partner_incomes_separate_and_combines_totals(
+    api: Api, ledger_app: FastAPI
+) -> None:
     for expense in WORKBOOK_NOVEMBER_EXPENSES:
-        assert record_expense(api, *expense).status_code == 201
+        if expense[2] == "Bills":
+            reference = category_reference(api, expense[2], expense[3])
+            with Session(ledger_app.state.database_engine) as session:
+                session.add(Expense(
+                    transaction_date=date.fromisoformat(expense[0]),
+                    amount=Decimal(expense[1]),
+                    **reference,
+                ))
+                session.commit()
+        else:
+            assert record_expense(api, *expense).status_code == 201
     assert record_income(api, "Azul", "2025-11", "4053.50").status_code == 201
     assert record_income(api, "Pinketa", "2025-11", "2025.00").status_code == 201
     members = member_ids(api)
@@ -378,7 +440,7 @@ def test_month_query_must_be_a_valid_month(api: Api, path: str, params: dict) ->
 
 def test_failed_expense_write_is_reported_and_not_stored(api: Api, ledger_app: FastAPI) -> None:
     with failing_commits(ledger_app):
-        response = record_expense(api, "2025-11-03", "12.36", "Bills", "Home Internet")
+        response = record_expense(api, "2025-11-03", "12.36", "Beauty", "Hair")
 
     assert_sanitized_storage_failure(response)
     assert read_month(api, "/expenses", "2025-11") == []
@@ -589,7 +651,7 @@ def test_one_off_bill_stays_unpaid_and_is_paid_once(api: Api) -> None:
     assert paid.json()["paid_amount"] == "43.25"
     assert paid.json()["paid_date"] == "2025-12-14"
     assert read_month(api, "/summary", "2025-12")["total_expenses"] == "43.25"
-    assert read_month(api, "/expenses", "2025-12")[0]["amount"] == "43.25"
+    assert read_month(api, "/expenses", "2025-12") == []
 
     repeated = api(
         "POST",
@@ -681,7 +743,8 @@ def test_bill_payment_counts_in_paid_month_and_budget(api: Api) -> None:
     assert december["total_expenses"] == "80.00"
     assert december["category_budgets"][0]["spent"] == "80.00"
     assert december["category_budgets"][0]["state"] == "warning"
-    assert read_month(api, "/expenses", "2025-12")[0]["subcategory"]["name"] == "Water"
+    assert december["balance"] == "-80.00"
+    assert read_month(api, "/expenses", "2025-12") == []
     next_occurrence = next(
         bill for bill in read_month(api, "/bills", "2025-12")
         if bill["due_date"] == "2025-12-30"
@@ -693,7 +756,7 @@ def test_bill_payment_counts_in_paid_month_and_budget(api: Api) -> None:
 def test_failed_bill_payment_rolls_back_expense(api: Api, ledger_app: FastAPI) -> None:
     assert api("POST", "/bills", json={
         "recurrence": "one_off", "due_date": "2025-12-10",
-        "amount": "40.00", **category_reference(api, "Bills"),
+        "amount": "40.00", **category_reference(api, "Bills", "Water"),
     }).status_code == 201
     occurrence = read_month(api, "/bills", "2025-12")[0]
     with failing_commits(ledger_app):
@@ -719,16 +782,123 @@ def test_failed_bill_payment_rolls_back_expense(api: Api, ledger_app: FastAPI) -
 def test_invalid_bill_is_rejected(api: Api, overrides: dict, field: str) -> None:
     response = api("POST", "/bills", json={
         "recurrence": "monthly", "due_date": "2025-12-10", "amount": "40.00",
-        **category_reference(api, "Bills"), **overrides,
+        **category_reference(api, "Bills", "Water"), **overrides,
     })
     assert_invalid(response, field)
     assert read_month(api, "/bills", "2025-12") == []
 
 
+@pytest.mark.parametrize(
+    ("category", "subcategory", "field"),
+    [
+        ("Bills", None, "subcategory_id"),
+        ("Groceries", None, "category_id"),
+        ("Beauty", "Hair", "category_id"),
+    ],
+)
+def test_bill_requires_bills_subcategory(
+    api: Api, category: str, subcategory: str | None, field: str
+) -> None:
+    reference = category_reference(api, category, subcategory)
+    if category != "Bills" and subcategory is None:
+        reference["subcategory_id"] = category_reference(api, "Bills", "Water")["subcategory_id"]
+    response = api("POST", "/bills", json={
+        "recurrence": "one_off", "due_date": "2025-12-10", "amount": "40.00",
+        **reference,
+    })
+    assert_invalid(response, field)
+    assert read_month(api, "/bills", "2025-12") == []
+    assert read_month(api, "/summary", "2025-12")["total_expenses"] == "0.00"
+
+
+def test_bill_requires_subcategory_field(api: Api) -> None:
+    response = api("POST", "/bills", json={
+        "recurrence": "one_off", "due_date": "2025-12-10", "amount": "40.00",
+        "category_id": category_reference(api, "Bills")["category_id"],
+    })
+    assert_invalid(response, "subcategory_id")
+    assert read_month(api, "/bills", "2025-12") == []
+
+
+def test_bill_rejects_subcategory_from_another_category(api: Api) -> None:
+    response = api("POST", "/bills", json={
+        "recurrence": "one_off", "due_date": "2025-12-10", "amount": "40.00",
+        "category_id": category_reference(api, "Bills")["category_id"],
+        "subcategory_id": category_reference(api, "Beauty", "Hair")["subcategory_id"],
+    })
+    assert_invalid(response, "subcategory_id")
+    assert read_month(api, "/bills", "2025-12") == []
+
+
+@pytest.mark.parametrize("subcategory", ["Water", "Electricity", "Heating", "Home Internet", "Phone Plan"])
+def test_bill_accepts_each_approved_subcategory(api: Api, subcategory: str) -> None:
+    response = api("POST", "/bills", json={
+        "recurrence": "one_off", "due_date": "2025-12-10", "amount": "40.00",
+        **category_reference(api, "Bills", subcategory),
+    })
+    assert response.status_code == 201
+    assert response.json()["subcategory"]["name"] == subcategory
+
+
+def test_bill_accepts_new_stored_subcategory(api: Api, ledger_app: FastAPI) -> None:
+    with Session(ledger_app.state.database_engine) as session:
+        category = session.scalar(select(Category).where(Category.name == "Bills"))
+        assert category is not None
+        subcategory = Subcategory(category_id=category.id, name="Other", position=99)
+        session.add(subcategory)
+        session.commit()
+        category_id, subcategory_id = category.id, subcategory.id
+
+    response = api("POST", "/bills", json={
+        "recurrence": "one_off", "due_date": "2025-12-10", "amount": "40.00",
+        "category_id": category_id, "subcategory_id": subcategory_id,
+    })
+    assert response.status_code == 201
+    assert response.json()["subcategory"]["name"] == "Other"
+
+
+def test_bill_classification_does_not_depend_on_category_name(
+    api: Api, ledger_app: FastAPI
+) -> None:
+    with Session(ledger_app.state.database_engine) as session:
+        bill_category = session.scalar(select(Category).where(Category.name == "Bills"))
+        other_category = session.scalar(select(Category).where(Category.name == "Groceries"))
+        assert bill_category is not None and other_category is not None
+        bill_category.name = "Utilities"
+        session.flush()
+        other_category.name = "Bills"
+        session.add(Expense(
+            transaction_date=date(2025, 11, 3),
+            amount=Decimal("10.00"),
+            category_id=bill_category.id,
+        ))
+        session.commit()
+
+    categories = {item["name"]: item for item in api("GET", "/categories").json()}
+    assert categories["Utilities"]["is_bill_category"] is True
+    assert categories["Bills"]["is_bill_category"] is False
+    assert_invalid(record_expense(api, "2025-11-03", "5.00", "Utilities", "Water"), "category_id")
+    assert record_expense(api, "2025-11-03", "7.00", "Bills").status_code == 201
+    expenses = read_month(api, "/expenses", "2025-11")
+    assert [expense["category"]["name"] for expense in expenses] == ["Bills"]
+    assert read_month(api, "/summary", "2025-11")["total_expenses"] == "17.00"
+    response = api("POST", "/bills", json={
+        "recurrence": "one_off", "due_date": "2025-12-10", "amount": "40.00",
+        **category_reference(api, "Utilities", "Water"),
+    })
+    assert response.status_code == 201
+    response = api("POST", "/bills", json={
+        "recurrence": "one_off", "due_date": "2025-12-10", "amount": "40.00",
+        "category_id": categories["Bills"]["id"],
+        "subcategory_id": category_reference(api, "Utilities", "Water")["subcategory_id"],
+    })
+    assert_invalid(response, "category_id")
+
+
 def test_paid_bill_cannot_be_adjusted(api: Api) -> None:
     assert api("POST", "/bills", json={
         "recurrence": "one_off", "due_date": "2025-12-10",
-        "amount": "40.00", **category_reference(api, "Bills"),
+        "amount": "40.00", **category_reference(api, "Bills", "Water"),
     }).status_code == 201
     occurrence = read_month(api, "/bills", "2025-12")[0]
     assert api("POST", f"/bills/occurrences/{occurrence['id']}/pay",
@@ -736,7 +906,8 @@ def test_paid_bill_cannot_be_adjusted(api: Api) -> None:
     response = api("PUT", f"/bills/occurrences/{occurrence['id']}/amount",
                    json={"amount": "20.00"})
     assert response.status_code == 409
-    assert read_month(api, "/expenses", "2025-12")[0]["amount"] == "40.00"
+    assert read_month(api, "/expenses", "2025-12") == []
+    assert read_month(api, "/summary", "2025-12")["total_expenses"] == "40.00"
 
 
 def test_concurrent_bill_payments_create_one_expense(api: Api, ledger_app: FastAPI) -> None:
@@ -744,7 +915,7 @@ def test_concurrent_bill_payments_create_one_expense(api: Api, ledger_app: FastA
         pytest.skip("Concurrent transaction test requires PostgreSQL.")
     assert api("POST", "/bills", json={
         "recurrence": "one_off", "due_date": "2025-12-10",
-        "amount": "40.00", **category_reference(api, "Bills"),
+        "amount": "40.00", **category_reference(api, "Bills", "Water"),
     }).status_code == 201
     occurrence = read_month(api, "/bills", "2025-12")[0]
     barrier = Barrier(2, timeout=10)
@@ -767,7 +938,9 @@ def test_concurrent_bill_payments_create_one_expense(api: Api, ledger_app: FastA
     finally:
         event.remove(engine, "after_cursor_execute", synchronize_unlocked_reads)
     assert sorted(response.status_code for response in responses) == [200, 409]
-    assert len(read_month(api, "/expenses", "2025-12")) == 1
+    assert read_month(api, "/expenses", "2025-12") == []
+    with Session(engine) as session:
+        assert session.scalar(select(func.count(Expense.id))) == 1
 
 
 def test_concurrent_bill_listing_generates_one_occurrence(api: Api, ledger_app: FastAPI) -> None:
@@ -775,7 +948,7 @@ def test_concurrent_bill_listing_generates_one_occurrence(api: Api, ledger_app: 
         pytest.skip("Concurrent transaction test requires PostgreSQL.")
     assert api("POST", "/bills", json={
         "recurrence": "monthly", "due_date": "2025-11-30",
-        "amount": "40.00", **category_reference(api, "Bills"),
+        "amount": "40.00", **category_reference(api, "Bills", "Water"),
     }).status_code == 201
     start = Barrier(2, timeout=10)
     unlocked_reads = Barrier(2, timeout=10)

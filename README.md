@@ -39,6 +39,8 @@ In the same terminal, apply migrations and start the API:
 
 On later runs, open a terminal in the project root and run `Set-Location backend` before the migration and API commands. The defaults connect to the local Compose database; to override them, copy `backend\.env.example` to `backend\.env` and adjust the settings.
 
+Migration `0005_bill_category` marks the existing seeded `Bills` category as the bill category and preserves existing expenses. It stops with an error if that category is missing. Run migrations before starting the updated API.
+
 The API is available at [http://localhost:8000](http://localhost:8000). Interactive API documentation is at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 ### Start the frontend
@@ -68,11 +70,13 @@ $today = Get-Date -Format 'yyyy-MM-dd'
 
 Invoke-RestMethod -Method Put -Uri "$api/budgets/1?month=$month" -ContentType 'application/json' -Body '{"amount":"300.00"}'
 Invoke-RestMethod -Method Put -Uri "$api/budgets/2?month=$month" -ContentType 'application/json' -Body '{"amount":"150.00"}'
-Invoke-RestMethod -Method Post -Uri "$api/expenses" -ContentType 'application/json' -Body "{`"transaction_date`":`"$today`",`"amount`":`"245.00`",`"category_id`":1,`"subcategory_id`":1}"
+$bill = Invoke-RestMethod -Method Post -Uri "$api/bills" -ContentType 'application/json' -Body "{`"recurrence`":`"one_off`",`"due_date`":`"$today`",`"amount`":`"245.00`",`"category_id`":1,`"subcategory_id`":1}"
+$occurrence = Invoke-RestMethod -Uri "$api/bills?month=$month" | Where-Object { $_.bill.id -eq $bill.id }
+Invoke-RestMethod -Method Post -Uri "$api/bills/occurrences/$($occurrence.id)/pay" -ContentType 'application/json' -Body "{`"paid_amount`":`"245.00`",`"paid_date`":`"$today`"}"
 Invoke-RestMethod -Method Post -Uri "$api/expenses" -ContentType 'application/json' -Body "{`"transaction_date`":`"$today`",`"amount`":`"180.00`",`"category_id`":2,`"subcategory_id`":null}"
 ```
 
-These commands use the default seeded category IDs and write to the local development database. They overwrite existing budgets for those categories and add expenses each time they are run. On a fresh database they show a warning for Bills and an over-budget state for Groceries; existing expenses affect the results.
+These commands use the default seeded category IDs and write to the local development database. They overwrite existing budgets for those categories and add a paid bill and an expense each time they are run. On a fresh database they show a warning for Bills and an over-budget state for Groceries; existing expenses affect the results.
 
 ## Tests
 
@@ -109,16 +113,16 @@ Amounts are EUR decimal strings with up to two decimals, for example `"12.36"`. 
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /categories` | Expense categories with their subcategories. |
+| `GET /categories` | Categories with their `is_bill_category` flag and stored subcategories. |
 | `GET /members` | The two household partners. |
 | `PATCH /members/{id}` | Change a partner's label. |
-| `POST /expenses` | Record a household expense with `transaction_date`, `amount`, `category_id` and optional `subcategory_id`. |
-| `GET /expenses?month=` | Expenses whose transaction date falls in the month. |
+| `POST /expenses` | Record a household expense with `transaction_date`, `amount`, and a non-bill `category_id`; `subcategory_id` is required when the category has subcategories. |
+| `GET /expenses?month=` | Non-bill-category expenses whose transaction date falls in the month. Bill-category records remain included in totals and budgets. |
 | `POST /incomes` | Record a partner's income for a month with `member_id`, `month` and `amount`; one per partner per month. |
 | `GET /incomes?month=` | Incomes recorded for the month. |
 | `GET /summary?month=` | Each partner's income, combined income, combined expenses and remaining balance. |
 | `PUT /budgets/{category_id}?month=YYYY-MM` | Set or update a category budget for a month. |
-| `POST /bills` | Create a one-off or monthly bill with a due date, amount, category and optional subcategory. |
+| `POST /bills` | Create a one-off or monthly bill with a due date, amount, the flagged bill category and one of its stored subcategories. |
 | `GET /bills?month=YYYY-MM` | Show occurrences due in the month, earlier unpaid occurrences, and occurrences paid in the month. |
 | `PUT /bills/occurrences/{id}/amount` | Adjust an unpaid occurrence's amount. |
 | `POST /bills/occurrences/{id}/pay` | Mark an occurrence paid with its actual `paid_amount` and `paid_date`; creates one household expense on that date. |

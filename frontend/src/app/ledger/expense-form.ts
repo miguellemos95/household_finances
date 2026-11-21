@@ -44,6 +44,9 @@ export class ExpenseForm {
   private readonly categoryId = toSignal(this.form.controls.categoryId.valueChanges, {
     initialValue: null,
   });
+  protected readonly expenseCategories = computed(() =>
+    this.categories().filter((category) => !category.is_bill_category),
+  );
   protected readonly subcategories = computed(
     () =>
       this.categories().find((category) => category.id === this.categoryId())?.subcategories ?? [],
@@ -66,6 +69,7 @@ export class ExpenseForm {
   }
 
   resetEntry(): void {
+    this.form.controls.subcategoryId.clearValidators();
     this.form.reset({
       transactionDate: this.today,
       amount: '',
@@ -74,6 +78,13 @@ export class ExpenseForm {
     });
     this.savedValues = this.form.getRawValue();
     this.failure.set(null);
+  }
+
+  protected selectCategory(): void {
+    const subcategory = this.form.controls.subcategoryId;
+    subcategory.reset();
+    subcategory.setValidators(this.subcategories().length ? Validators.required : null);
+    subcategory.updateValueAndValidity();
   }
 
   protected showError(control: AbstractControl): boolean {

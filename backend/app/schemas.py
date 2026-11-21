@@ -30,6 +30,7 @@ class NamedReference(ReadModel):
 
 
 class CategoryRead(NamedReference):
+    is_bill_category: bool
     subcategories: list[NamedReference]
 
 
@@ -102,7 +103,7 @@ class BillCreate(BaseModel):
     due_date: date
     amount: Amount
     category_id: EntityId
-    subcategory_id: EntityId | None = None
+    subcategory_id: EntityId
 
 
 class BillRead(ReadModel):
