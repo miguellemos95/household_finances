@@ -2,7 +2,7 @@
 
 ## Status
 
-Requirements are partially confirmed and the initial architecture is selected. GitHub issues #1-#4 are registered. Issue #1 is completed and closed: Angular and FastAPI local checks and PostgreSQL container integration pass. Issue #2 (expense and income ledger with monthly summary) is complete and closed after PR [#6](https://github.com/miguellemos95/household_finances/pull/6) merged on 2026-11-21 and its acceptance criteria were verified. Issue #3 is closed after PR [#8](https://github.com/miguellemos95/household_finances/pull/8) merged. Issue #4 remains open; its implementation and layout fix were merged into `docs-run-project`, but gaps remain.
+Requirements are partially confirmed and the initial architecture is selected. GitHub issues #1-#4 are registered. Issue #1 is completed and closed: Angular and FastAPI local checks and PostgreSQL container integration pass. Issue #2 (expense and income ledger with monthly summary) is complete and closed after PR [#6](https://github.com/miguellemos95/household_finances/pull/6) merged on 2026-11-21 and its acceptance criteria were verified. Issue #3 is closed after PR [#8](https://github.com/miguellemos95/household_finances/pull/8) merged. Issue #4 is closed after PR [#13](https://github.com/miguellemos95/household_finances/pull/13) merged into `master` on 2026-11-21; its bill tests were rechecked after the merge.
 
 ## Objective
 
@@ -137,7 +137,7 @@ Not part of issue #2: editing or deleting records, description/payee, income dat
 
 ## Domain Model and Diagrams
 
-Domain concepts. Household, member, expense, income, and category behavior is implemented by issue #2; budget behavior is implemented by issue #3, and issue #4 bill behavior has remaining gaps:
+Domain concepts. Household, member, expense, income, and category behavior is implemented by issue #2; budget behavior by issue #3; and bill behavior by issue #4:
 
 - **Household:** the shared financial scope. It is implicit: the application serves one household, so there is no household record.
 - **Member:** one of the two partners, with a changeable label; income is associated with a member.
@@ -253,9 +253,9 @@ sequenceDiagram
 | [#1 Scaffold Angular, FastAPI, and PostgreSQL foundation](https://github.com/miguellemos95/household_finances/issues/1) | Local app/API/database foundation, health/readiness, migrations, startup documentation, and test setup. | Completed and closed; PostgreSQL integration verified |
 | [#2 Implement household expense and income ledger](https://github.com/miguellemos95/household_finances/issues/2) | Shared dated expenses, per-partner monthly income, changeable partner labels, workbook categories, and monthly summary. Depends on #1. | Completed and verified; merged in PR [#6](https://github.com/miguellemos95/household_finances/pull/6) on 2026-11-21; issue closed |
 | [#3 Add monthly category budgets and in-app alerts](https://github.com/miguellemos95/household_finances/issues/3) | Monthly category budgets with in-app 80% warning and over-budget state. Depends on #2. | Closed after PR [#8](https://github.com/miguellemos95/household_finances/pull/8) merged |
-| [#4 Add one-off and recurring bill tracking](https://github.com/miguellemos95/household_finances/issues/4) | One-off/monthly bills, due dates, pending/paid lifecycle, adjustable occurrences, and paid-date expense accounting. Depends on #2 and #3. | PRs [#10](https://github.com/miguellemos95/household_finances/pull/10) and [#11](https://github.com/miguellemos95/household_finances/pull/11) merged into `docs-run-project`; issue remains open |
+| [#4 Add one-off and recurring bill tracking](https://github.com/miguellemos95/household_finances/issues/4) | One-off/monthly bills, due dates, pending/paid lifecycle, adjustable occurrences, and paid-date expense accounting. Depends on #2 and #3. | Closed after PR [#13](https://github.com/miguellemos95/household_finances/pull/13) merged into `master`; bill tests rechecked |
 
-Issue #4 follow-up: the user approved adding bill subcategory selection, concurrency-safe occurrence generation and payment, and targeted acceptance/error tests. The fixes are in progress on `fix/issue-4-completion`; the user approved a PR targeting `master` to include the previously merged bill work. Keep issue #4 open until that PR is reviewed, merged, and its criteria rechecked.
+Issue #4 follow-up: the user approved adding bill subcategory selection, concurrency-safe occurrence generation and payment, and targeted acceptance/error tests. These fixes and the earlier bill work were merged to `master` in PR #13. GitHub closed issue #4; post-merge PostgreSQL bill tests and frontend tests passed.
 
 ### Bill follow-up design
 
@@ -346,3 +346,4 @@ The consolidated "failover" table primarily covers application error handling; i
 | BIL-010 | #4 concurrent recurring generation | PostgreSQL integration | Two requests load the same newly generated month | Both succeed and return the same single occurrence | As expected on PostgreSQL | Passed | `test_concurrent_bill_listing_generates_one_occurrence` |
 | BIL-011 | #4 failure handling; NFR-004 | API and UI / error path | Payment commit fails; invalid bill inputs; adjustment after payment; UI payment fails | Sanitized `503` and rollback with successful retry; invalid input rejected; paid adjustment returns `409`; UI shows failure without confirmation | As expected on SQLite and PostgreSQL; UI error test passed | Passed | `test_failed_bill_payment_rolls_back_expense`; `test_invalid_bill_is_rejected`; `test_paid_bill_cannot_be_adjusted`; `should report a failed payment without confirming or refreshing` |
 | BIL-012 | #4 regression | Automated | Run complete backend suites, frontend tests and build | All pass; concurrency is verified on PostgreSQL | PostgreSQL: 85 passed; SQLite: 83 passed, 2 PostgreSQL-only concurrency tests skipped; Angular: 32 passed; production build and touched-file Prettier check passed | Passed | `python -m pytest` with dedicated `TEST_DATABASE_URL` and with temporary SQLite; `npm test -- --watch=false`; `npm run build` |
+| BIL-013 | #4 post-merge verification | PostgreSQL / frontend | Rerun bill API tests and frontend suite on the merged code | Bill acceptance/error tests and frontend suite pass | 13 bill tests passed on a dedicated PostgreSQL database; 32 frontend tests passed; the test database was removed | Passed | `python -m pytest tests/test_ledger.py -k bill -q`; `npm test -- --watch=false` |
