@@ -1,0 +1,136 @@
+:host {
+  display: block;
+}
+
+.ledger {
+  display: grid;
+  gap: 1.75rem;
+  width: min(100%, 64rem);
+  margin: 0 auto;
+  padding: 2.5rem 0 3.5rem;
+}
+
+.ledger-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  color: #a45b35;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+h1 {
+  margin: 0;
+  color: #20352d;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+  font-size: 2.5rem;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+h2 {
+  margin: 0 0 1rem;
+  color: #233b32;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.month-nav input {
+  min-height: 2.5rem;
+  padding: 0 0.6rem;
+  border: 1px solid #b9c6bc;
+  border-radius: 0.4rem;
+  background: #fff;
+  color: #20352d;
+}
+
+.load-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+.figure,
+.panel {
+  padding: 1.25rem 1.5rem;
+  border: 1px solid #d5ded6;
+  border-radius: 0.6rem;
+  background: #fff;
+}
+
+.figure dt {
+  color: #587168;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.figure dd {
+  margin: 0.4rem 0 0;
+  color: #20352d;
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.figure-negative dd {
+  color: #a13d30;
+}
+
+.panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  align-items: start;
+  gap: 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+th,
+td {
+  padding: 0.65rem 0.5rem;
+  border-bottom: 1px solid #e3e9e4;
+  text-align: left;
+}
+
+th {
+  color: #587168;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  margin: 0;
+  color: #587168;
+}

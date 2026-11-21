@@ -43,7 +43,7 @@ npm ci
 npm start
 ```
 
-Open `http://localhost:4200`. The development screen checks the API liveness endpoint and reports whether it is reachable.
+Open `http://localhost:4200`. The page shows the monthly household ledger: a month selector, the combined income, household expenses and remaining balance, each partner's income, a form to add an expense, and that month's expenses. The footer reports whether the API liveness endpoint is reachable.
 
 ## Tests
 
@@ -51,6 +51,15 @@ From `backend`:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
+```
+
+Backend tests migrate a temporary SQLite database by default. To run the same tests against PostgreSQL, create a dedicated database once and point `TEST_DATABASE_URL` at it. Each test migrates that database and then downgrades it to empty, so never use the development database here.
+
+```powershell
+docker compose exec db createdb -U household household_finances_test
+$env:TEST_DATABASE_URL = "postgresql+psycopg://household:household_dev@localhost:5432/household_finances_test"
+.\.venv\Scripts\python.exe -m pytest
+Remove-Item Env:\TEST_DATABASE_URL
 ```
 
 From `frontend`:
@@ -64,3 +73,20 @@ npm run build
 
 - `GET /health/live` reports that the API process is responsive.
 - `GET /health/ready` checks database connectivity and returns a sanitized `503` response when PostgreSQL is unavailable.
+
+## Ledger endpoints
+
+Amounts are EUR decimal strings with up to two decimals, for example `"12.36"`. Months use `YYYY-MM`.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /categories` | Expense categories with their subcategories. |
+| `GET /members` | The two household partners. |
+| `PATCH /members/{id}` | Change a partner's label. |
+| `POST /expenses` | Record a household expense with `transaction_date`, `amount`, `category_id` and optional `subcategory_id`. |
+| `GET /expenses?month=` | Expenses whose transaction date falls in the month. |
+| `POST /incomes` | Record a partner's income for a month with `member_id`, `month` and `amount`; one per partner per month. |
+| `GET /incomes?month=` | Incomes recorded for the month. |
+| `GET /summary?month=` | Each partner's income, combined income, combined expenses and remaining balance. |
+
+Errors use `{"detail": {"code", "message", "errors"?}}`: `422 invalid_input` for invalid values, `404 not_found`, `409 conflict` for a second income for the same partner and month, and a sanitized `503 database_unavailable` when storage fails. A failed write is rolled back.

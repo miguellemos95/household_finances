@@ -1,0 +1,88 @@
+<section class="ledger" aria-labelledby="ledger-title">
+  <header class="ledger-header">
+    <div>
+      <p class="eyebrow">MONTHLY LEDGER</p>
+      <h1 id="ledger-title">{{ monthLabel() }}</h1>
+    </div>
+    <div class="month-nav">
+      <button type="button" class="button button-quiet" (click)="moveMonth(-1)">Previous</button>
+      <label class="visually-hidden" for="ledger-month">Month</label>
+      <input
+        id="ledger-month"
+        #monthInput
+        type="month"
+        [value]="month()"
+        (change)="selectMonth(monthInput.value)"
+      />
+      <button type="button" class="button button-quiet" (click)="moveMonth(1)">Next</button>
+    </div>
+  </header>
+
+  @if (loadError(); as error) {
+    <div class="notice notice-error load-error" role="alert">
+      <span>The ledger could not be loaded. {{ error }}</span>
+      <button type="button" class="button button-quiet" (click)="reload()">Try again</button>
+    </div>
+  }
+
+  @if (visibleLedger(); as data) {
+    <dl class="summary">
+      <div class="figure">
+        <dt>Combined income</dt>
+        <dd>{{ data.summary.total_income | currency: 'EUR' }}</dd>
+      </div>
+      <div class="figure">
+        <dt>Household expenses</dt>
+        <dd>{{ data.summary.total_expenses | currency: 'EUR' }}</dd>
+      </div>
+      <div class="figure" [class.figure-negative]="isNegative(data.summary.balance)">
+        <dt>Remaining balance</dt>
+        <dd>{{ data.summary.balance | currency: 'EUR' }}</dd>
+      </div>
+    </dl>
+
+    <div class="panels">
+      <section class="panel" aria-labelledby="income-title">
+        <h2 id="income-title">Income</h2>
+        @for (income of data.summary.incomes; track income.member_id + ':' + month()) {
+          <app-partner-income [income]="income" [month]="data.summary.month" (changed)="reload()" />
+        }
+      </section>
+
+      <section class="panel" aria-labelledby="expense-form-title">
+        <h2 id="expense-form-title">Add expense</h2>
+        <app-expense-form [categories]="data.categories" (recorded)="showExpenseMonth($event)" />
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="expenses-title">
+      <h2 id="expenses-title">Expenses</h2>
+      @if (data.expenses.length > 0) {
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Category</th>
+              <th scope="col">Subcategory</th>
+              <th scope="col" class="numeric">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (expense of data.expenses; track expense.id) {
+              <tr>
+                <td>{{ expense.transaction_date | date: 'd MMM y' }}</td>
+                <td>{{ expense.category.name }}</td>
+                <td>{{ expense.subcategory?.name ?? '—' }}</td>
+                <td class="numeric">{{ expense.amount | currency: 'EUR' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <p class="empty">No expenses recorded for {{ monthLabel() }}.</p>
+      }
+    </section>
+  } @else if (!loadError()) {
+    <p class="empty" role="status">Loading the ledger…</p>
+  }
+</section>
