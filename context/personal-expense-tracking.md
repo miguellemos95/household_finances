@@ -2,7 +2,7 @@
 
 ## Status
 
-Requirements are partially confirmed and the initial architecture is selected. GitHub issues #1-#4 are registered. Issue #1 is completed and closed: Angular and FastAPI local checks and PostgreSQL container integration pass. Issue #2 (expense and income ledger with monthly summary) is implemented and verified on the `issue-2-expense-income-ledger` branch; it stays open until its pull request is reviewed and merged. Remaining product decisions must be resolved before implementing affected later issues.
+Requirements are partially confirmed and the initial architecture is selected. GitHub issues #1-#4 are registered. Issue #1 is completed and closed: Angular and FastAPI local checks and PostgreSQL container integration pass. Issue #2 (expense and income ledger with monthly summary) is complete and closed after PR [#6](https://github.com/miguellemos95/household_finances/pull/6) merged on 2026-11-21 and its acceptance criteria were verified. Remaining product decisions must be resolved before implementing affected later issues.
 
 ## Objective
 
@@ -248,7 +248,7 @@ sequenceDiagram
 | Issue | Scope | Status |
 | --- | --- | --- |
 | [#1 Scaffold Angular, FastAPI, and PostgreSQL foundation](https://github.com/miguellemos95/household_finances/issues/1) | Local app/API/database foundation, health/readiness, migrations, startup documentation, and test setup. | Completed and closed; PostgreSQL integration verified |
-| [#2 Implement household expense and income ledger](https://github.com/miguellemos95/household_finances/issues/2) | Shared dated expenses, per-partner monthly income, changeable partner labels, workbook categories, and monthly summary. Depends on #1. | Implemented and verified on `issue-2-expense-income-ledger`; draft pull request [#6](https://github.com/miguellemos95/household_finances/pull/6) awaits review; the issue stays open until it is merged |
+| [#2 Implement household expense and income ledger](https://github.com/miguellemos95/household_finances/issues/2) | Shared dated expenses, per-partner monthly income, changeable partner labels, workbook categories, and monthly summary. Depends on #1. | Completed and verified; merged in PR [#6](https://github.com/miguellemos95/household_finances/pull/6) on 2026-11-21; issue closed |
 | [#3 Add monthly category budgets and in-app alerts](https://github.com/miguellemos95/household_finances/issues/3) | Monthly category budgets with in-app 80% warning and over-budget state. Depends on #2. | Registered |
 | [#4 Add one-off and recurring bill tracking](https://github.com/miguellemos95/household_finances/issues/4) | One-off/monthly bills, due dates, pending/paid lifecycle, adjustable occurrences, and paid-date expense accounting. Depends on #2 and #3. | Registered |
 
