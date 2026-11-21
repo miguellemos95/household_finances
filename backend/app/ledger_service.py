@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+import calendar
 from datetime import date
 from decimal import Decimal
 
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.database import commit
 from app.errors import ConflictError, InvalidEntryError, NotFoundError
 from app.models import (
+    Bill,
+    BillOccurrence,
     Category,
     CategoryBudget,
     Expense,
@@ -18,6 +21,9 @@ from app.models import (
 )
 from app.months import month_bounds
 from app.schemas import (
+    BillCreate,
+    BillOccurrenceRead,
+    BillRead,
     CategoryBudgetRead,
     ExpenseCreate,
     IncomeCreate,
@@ -211,3 +217,181 @@ def list_category_budgets(session: Session, month: date) -> list[CategoryBudgetR
 def _in_month(month: date) -> ColumnElement[bool]:
     first_day, last_day = month_bounds(month)
     return Expense.transaction_date.between(first_day, last_day)
+
+
+def create_bill(
+    session: Session, entry: BillCreate, today: date
+) -> Bill:
+    if entry.recurrence not in {"one_off", "monthly"}:
+        raise InvalidEntryError(
+            "Recurrence must be one_off or monthly.",
+            field="recurrence",
+        )
+    category = session.get(Category, entry.category_id)
+    if category is None:
+        raise InvalidEntryError("Category does not exist.", field="category_id")
+    subcategory = None
+    if entry.subcategory_id is not None:
+        subcategory = session.get(Subcategory, entry.subcategory_id)
+        if subcategory is None or subcategory.category_id != category.id:
+            raise InvalidEntryError(
+                "Subcategory does not belong to the category.",
+                field="subcategory_id",
+            )
+
+    due_day = entry.due_date.day if entry.recurrence == "monthly" else None
+    bill = Bill(
+        recurrence=entry.recurrence,
+        first_due_date=entry.due_date,
+        due_day=due_day,
+        default_amount=entry.amount,
+        category=category,
+        subcategory=subcategory,
+    )
+    first_occurrence = BillOccurrence(
+        due_date=entry.due_date,
+        amount=entry.amount,
+        status="pending",
+    )
+    bill.occurrences.append(first_occurrence)
+    session.add(bill)
+    commit(session)
+    return bill
+
+
+def list_bill_occurrences(
+    session: Session, month: date, today: date
+) -> list[BillOccurrenceRead]:
+    bills = session.scalars(
+        select(Bill)
+        .options(joinedload(Bill.category), joinedload(Bill.subcategory))
+        .order_by(Bill.id)
+        .with_for_update(of=Bill)
+    ).all()
+    for bill in bills:
+        if bill.recurrence == "monthly":
+            cursor = bill.first_due_date.replace(day=1)
+            while cursor <= month.replace(day=1):
+                due_date = _due_date_for_month(cursor.year, cursor.month, bill.due_day)
+                if not session.scalar(
+                    select(BillOccurrence.id).where(
+                        BillOccurrence.bill_id == bill.id,
+                        BillOccurrence.due_date == due_date,
+                    )
+                ):
+                    session.add(
+                        BillOccurrence(
+                            bill=bill,
+                            due_date=due_date,
+                            amount=bill.default_amount,
+                            status="pending",
+                        )
+                    )
+                if cursor == month.replace(day=1):
+                    break
+                cursor = _next_month(cursor)
+    commit(session)
+
+    first_day, last_day = month_bounds(month)
+    occurrences = session.scalars(
+        select(BillOccurrence)
+        .options(
+            joinedload(BillOccurrence.bill).joinedload(Bill.category),
+            joinedload(BillOccurrence.bill).joinedload(Bill.subcategory),
+        )
+        .join(Bill, BillOccurrence.bill_id == Bill.id)
+        .where(
+            (BillOccurrence.due_date.between(first_day, last_day))
+            | (
+                (BillOccurrence.status != "paid")
+                & (BillOccurrence.due_date < first_day)
+            )
+            | (
+                (BillOccurrence.status == "paid")
+                & (BillOccurrence.paid_date.between(first_day, last_day))
+            )
+        )
+        .order_by(BillOccurrence.due_date, BillOccurrence.id)
+    ).all()
+
+    return [_bill_occurrence_read(occurrence, today) for occurrence in occurrences]
+
+
+def _bill_occurrence_read(occurrence: BillOccurrence, today: date) -> BillOccurrenceRead:
+    result = BillOccurrenceRead.model_validate(occurrence)
+    if result.status != "paid":
+        result.status = "overdue" if result.due_date < today else "pending"
+    return result
+
+
+def adjust_bill_occurrence(
+    session: Session, occurrence_id: int, amount: Decimal, today: date
+) -> BillOccurrenceRead:
+    occurrence = session.scalar(
+        select(BillOccurrence)
+        .options(joinedload(BillOccurrence.bill).joinedload(Bill.category),
+                 joinedload(BillOccurrence.bill).joinedload(Bill.subcategory))
+        .where(BillOccurrence.id == occurrence_id)
+        .with_for_update(of=BillOccurrence)
+    )
+    if occurrence is None:
+        raise NotFoundError("Bill occurrence does not exist.")
+    if occurrence.status == "paid":
+        raise ConflictError("A paid bill occurrence cannot be adjusted.")
+    occurrence.amount = amount
+    commit(session)
+    return _bill_occurrence_read(occurrence, today)
+
+
+def pay_bill_occurrence(
+    session: Session,
+    occurrence_id: int,
+    paid_amount: Decimal,
+    paid_date: date,
+    today: date,
+) -> BillOccurrenceRead:
+    if paid_date > today:
+        raise InvalidEntryError(
+            "Paid date cannot be in the future.",
+            field="paid_date",
+        )
+    occurrence = session.scalar(
+        select(BillOccurrence)
+        .options(joinedload(BillOccurrence.bill).joinedload(Bill.category),
+                 joinedload(BillOccurrence.bill).joinedload(Bill.subcategory))
+        .where(BillOccurrence.id == occurrence_id)
+        .with_for_update(of=BillOccurrence)
+    )
+    if occurrence is None:
+        raise NotFoundError("Bill occurrence does not exist.")
+    if occurrence.status == "paid":
+        raise ConflictError("Bill occurrence is already paid.")
+
+    expense = Expense(
+        transaction_date=paid_date,
+        amount=paid_amount,
+        category=occurrence.bill.category,
+        subcategory=occurrence.bill.subcategory,
+    )
+    session.add(expense)
+    session.flush()
+    occurrence.status = "paid"
+    occurrence.paid_amount = paid_amount
+    occurrence.paid_date = paid_date
+    occurrence.amount = paid_amount
+    occurrence.expense_id = expense.id
+    commit(session)
+    return BillOccurrenceRead.model_validate(occurrence)
+
+
+def _due_date_for_month(year: int, month: int, due_day: int | None) -> date:
+    if due_day is None:
+        raise ValueError("Monthly bill must have a due day.")
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, min(due_day, last_day))
+
+
+def _next_month(month: date) -> date:
+    if month.month == 12:
+        return date(month.year + 1, 1, 1)
+    return date(month.year, month.month + 1, 1)

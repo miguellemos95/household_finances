@@ -30,8 +30,8 @@ Feature-level requirements are tracked in [Personal Expense Tracking](personal-e
 4. Draft a ticket with a title and description for the user to register, unless the user explicitly asks the assistant to register it in GitHub. Include scope, acceptance criteria, relevant context, and intended verification.
 5. Before implementation, require an actual registered ticket ID. When the assistant creates an issue at the user's explicit request, record the returned issue ID against the feature/use case; a draft ticket is not implementation approval.
 6. Implement only the agreed ticket scope, including tests and the consolidated test and failover table.
-7. Execute relevant feature and regression tests and record actual results and any failures or limitations. Keep context, diagrams, decisions, and implementation aligned; raise scope changes with the user.
-8. Once implementation, verification, and documentation are complete, open a pull request referencing the registered issue. If verification is blocked or fails, report it honestly rather than presenting the work as verified.
+7. Map every acceptance criterion to specific tests and actual outcomes, including relevant concurrency and failure cases. Execute feature and regression tests; mark missing evidence as not verified. Keep context, diagrams, decisions, and implementation aligned; raise scope changes with the user.
+8. Before opening a pull request, fetch remote refs, identify the default branch and compare the proposed head and base, including unmerged prerequisite commits. Confirm the target with the user when it is not the default or when the diff includes prior work. Include the criterion evidence and limitations in the PR; do not claim completion where verification is blocked or fails.
 9. The user reviews and approves the pull request. Do not merge without explicit user authorization. Keep evidence and communication concise and grounded in actual results to avoid unnecessary token use.
 10. After the user merges the pull request, verify the associated issue's acceptance criteria. Close the issue if completed; otherwise report what remains open.
 11. When the issue is closed and all work and relevant documentation for the session are complete, tell the user to close the session. If anything remains unfinished or unpushed, identify it instead of saying the session is complete.
@@ -40,7 +40,7 @@ Feature-level requirements are tracked in [Personal Expense Tracking](personal-e
 
 | Feature / use case | Status | Ticket |
 | --- | --- | --- |
-| [Personal expense tracking](personal-expense-tracking.md) | Issues #1-#4 registered; #1 and #2 completed and closed; #3 implementation in PR #8 for review | [#1](https://github.com/miguellemos95/household_finances/issues/1), [#2](https://github.com/miguellemos95/household_finances/issues/2), [#3](https://github.com/miguellemos95/household_finances/issues/3), [#4](https://github.com/miguellemos95/household_finances/issues/4) |
+| [Personal expense tracking](personal-expense-tracking.md) | Issues #1-#3 closed; #4 implementation and layout fix merged into `docs-run-project` in PRs #10 and #11; issue #4 remains open with gaps to address | [#1](https://github.com/miguellemos95/household_finances/issues/1), [#2](https://github.com/miguellemos95/household_finances/issues/2), [#3](https://github.com/miguellemos95/household_finances/issues/3), [#4](https://github.com/miguellemos95/household_finances/issues/4) |
 
 Each future feature/use-case document must capture:
 

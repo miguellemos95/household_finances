@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { environment } from '../../environments/environment';
-import { Category, Expense, MonthlySummary } from './ledger-api';
+import { BillOccurrence, Category, Expense, MonthlySummary } from './ledger-api';
 import { LedgerPage } from './ledger-page';
 
 const api = environment.apiBaseUrl;
@@ -90,10 +90,12 @@ describe('LedgerPage', () => {
     month = '2025-11',
     monthSummary = summary({ month }),
     expenses: Expense[] = [INTERNET],
+    bills: BillOccurrence[] = [],
   ): void {
     http.expectOne(`${api}/categories`).flush(CATEGORIES);
     http.expectOne(`${api}/summary?month=${month}`).flush(monthSummary);
     http.expectOne(`${api}/expenses?month=${month}`).flush(expenses);
+    http.expectOne(`${api}/bills?month=${month}`).flush(bills);
     fixture.detectChanges();
   }
 
@@ -180,6 +182,7 @@ describe('LedgerPage', () => {
     http.expectOne(`${api}/categories`).flush(CATEGORIES);
     http.expectOne(`${api}/summary?month=2025-11`).error(new ProgressEvent('error'));
     expect(http.expectOne(`${api}/expenses?month=2025-11`).cancelled).toBe(true);
+    expect(http.expectOne(`${api}/bills?month=2025-11`).cancelled).toBe(true);
     fixture.detectChanges();
 
     expect(page.textContent).toContain(
@@ -368,6 +371,125 @@ describe('LedgerPage', () => {
 
     http.expectNone(`${api}/budgets/1?month=2025-11`);
     expect(page.textContent).toContain('Enter a budget amount greater than 0');
+  });
+
+  it('should create a bill and refresh the ledger', () => {
+    flushLedger();
+
+    choose('#bill-recurrence', 1);
+    type('#bill-due-date', '2025-12-20');
+    type('#bill-amount', '45.00');
+    choose('#bill-category', 1);
+    submitFormOf('#bill-amount');
+
+    const request = http.expectOne(`${api}/bills`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      recurrence: 'monthly',
+      due_date: '2025-12-20',
+      amount: '45.00',
+      category_id: 1,
+      subcategory_id: null,
+    });
+
+    request.flush({
+      id: 1,
+      recurrence: 'monthly',
+      first_due_date: '2025-12-20',
+      due_day: 20,
+      default_amount: '45.00',
+      category: { id: 1, name: 'Bills' },
+      subcategory: null,
+    });
+    flushLedger();
+
+    expect(page.textContent).toContain('Bill saved or marked paid.');
+  });
+
+  it('should send a selected bill subcategory and clear it when category changes', () => {
+    flushLedger();
+    type('#bill-due-date', '2025-11-20');
+    type('#bill-amount', '45.00');
+    choose('#bill-category', 1);
+    choose('#bill-subcategory', 2);
+    choose('#bill-category', 2);
+    expect(page.querySelector('#bill-subcategory')).toBeNull();
+    choose('#bill-category', 1);
+    expect(element<HTMLSelectElement>('#bill-subcategory').value).toBe('');
+    choose('#bill-subcategory', 2);
+    submitFormOf('#bill-amount');
+    const request = http.expectOne(`${api}/bills`);
+    expect(request.request.body.subcategory_id).toBe(4);
+    request.flush({ id: 1 });
+    flushLedger();
+  });
+
+  it('should mark a pending bill paid and refresh totals', () => {
+    const bill: BillOccurrence = {
+      id: 9,
+      bill: {
+        id: 2,
+        recurrence: 'one_off',
+        first_due_date: '2025-11-20',
+        due_day: null,
+        default_amount: '45.00',
+        category: { id: 1, name: 'Bills' },
+        subcategory: null,
+      },
+      due_date: '2025-11-20',
+      amount: '45.00',
+      status: 'pending',
+      paid_amount: null,
+      paid_date: null,
+    };
+    flushLedger('2025-11', summary(), [INTERNET], [bill]);
+
+    clickButton('Mark paid');
+    const request = http.expectOne(`${api}/bills/occurrences/9/pay`);
+    expect(request.request.body).toEqual({
+      paid_amount: '45.00',
+      paid_date: '2025-11-15',
+    });
+    request.flush({
+      ...bill,
+      status: 'paid',
+      paid_amount: '45.00',
+      paid_date: '2025-11-15',
+    });
+    flushLedger('2025-11', summary({ total_expenses: '57.36', balance: '3996.14' }));
+
+    expect(page.textContent).toContain('Bill saved or marked paid.');
+  });
+
+  it('should report a failed payment without confirming or refreshing', () => {
+    const bill: BillOccurrence = {
+      id: 9,
+      bill: {
+        id: 2,
+        recurrence: 'one_off',
+        first_due_date: '2025-11-10',
+        due_day: null,
+        default_amount: '45.00',
+        category: { id: 1, name: 'Bills' },
+        subcategory: null,
+      },
+      due_date: '2025-11-10',
+      amount: '45.00',
+      status: 'overdue',
+      paid_amount: null,
+      paid_date: null,
+    };
+    flushLedger('2025-11', summary(), [INTERNET], [bill]);
+    clickButton('Mark paid');
+    http
+      .expectOne(`${api}/bills/occurrences/9/pay`)
+      .flush(DATABASE_UNAVAILABLE, { status: 503, statusText: 'Service Unavailable' });
+    fixture.detectChanges();
+
+    expect(page.textContent).toContain('The bill was not saved. Database is unavailable.');
+    expect(page.textContent).not.toContain('Bill saved or marked paid.');
+    expect(page.textContent).toContain('overdue');
+    http.expectNone(`${api}/summary?month=2025-11`);
   });
 
   it('should rename a partner and refresh the month', () => {

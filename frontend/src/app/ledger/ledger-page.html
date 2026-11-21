@@ -49,6 +49,123 @@
         }
       </section>
 
+      <section class="panel bill-panel" aria-labelledby="bills-title">
+        <h2 id="bills-title">Bills</h2>
+        @if (billSaved()) {
+          <p class="notice notice-success" role="status">Bill saved or marked paid.</p>
+        }
+        @if (billError(); as error) {
+          <p class="notice notice-error" role="alert">The bill was not saved. {{ error }}</p>
+        }
+
+        <form
+          class="bill-create"
+          (submit)="
+            recordBill(billRecurrence, billDueDate, billAmount, billCategory);
+            $event.preventDefault()
+          "
+        >
+          <label for="bill-recurrence">Type</label>
+          <select id="bill-recurrence" #billRecurrence>
+            <option value="one_off">One-off</option>
+            <option value="monthly">Monthly recurring</option>
+          </select>
+          <label for="bill-due-date">Due date</label>
+          <input id="bill-due-date" type="date" #billDueDate />
+          <label for="bill-amount">Amount (EUR)</label>
+          <input id="bill-amount" type="text" inputmode="decimal" #billAmount />
+          <label for="bill-category">Category</label>
+          <select
+            id="bill-category"
+            #billCategory
+            [value]="billCategoryId() ?? 0"
+            (change)="selectBillCategory(billCategory.value)"
+          >
+            <option value="0">Choose a category</option>
+            @for (category of data.categories; track category.id) {
+              <option [value]="category.id">{{ category.name }}</option>
+            }
+          </select>
+          @if (billSubcategories().length > 0) {
+            <label for="bill-subcategory">Subcategory (optional)</label>
+            <select
+              id="bill-subcategory"
+              #billSubcategory
+              [value]="billSubcategoryId() ?? ''"
+              (change)="selectBillSubcategory(billSubcategory.value)"
+            >
+              <option value="">No subcategory</option>
+              @for (subcategory of billSubcategories(); track subcategory.id) {
+                <option [value]="subcategory.id">{{ subcategory.name }}</option>
+              }
+            </select>
+          }
+          <button type="submit" class="button">Add bill</button>
+        </form>
+
+        @if (data.bills.length > 0) {
+          <div class="bill-grid">
+            @for (bill of data.bills; track bill.id) {
+              <article
+                class="bill-card"
+                [class.bill-overdue]="bill.status === 'overdue'"
+                [class.bill-paid]="bill.status === 'paid'"
+              >
+                <div class="bill-heading">
+                  <h3>
+                    {{ bill.bill.category.name }}
+                    @if (bill.bill.subcategory) {
+                      — {{ bill.bill.subcategory.name }}
+                    }
+                  </h3>
+                  <span class="bill-status">{{ bill.status }}</span>
+                </div>
+                <p>Due {{ bill.due_date | date: 'd MMM y' }}</p>
+                @if (bill.status !== 'paid') {
+                  <label [for]="'bill-occurrence-' + bill.id">Amount</label>
+                  <div class="bill-actions">
+                    <input
+                      [id]="'bill-occurrence-' + bill.id"
+                      #billAmountInput
+                      type="text"
+                      inputmode="decimal"
+                      [value]="bill.amount"
+                    />
+                    <button
+                      type="button"
+                      class="button button-quiet"
+                      (click)="adjustBillAmount(bill, billAmountInput)"
+                    >
+                      Adjust
+                    </button>
+                    <input
+                      [attr.aria-label]="'Paid date for bill ' + bill.id"
+                      #billPaidDate
+                      type="date"
+                      [value]="today"
+                    />
+                    <button
+                      type="button"
+                      class="button"
+                      (click)="payBill(bill, billAmountInput, billPaidDate)"
+                    >
+                      Mark paid
+                    </button>
+                  </div>
+                } @else {
+                  <p>
+                    Paid {{ bill.paid_amount | currency: 'EUR' }} on
+                    {{ bill.paid_date | date: 'd MMM y' }}
+                  </p>
+                }
+              </article>
+            }
+          </div>
+        } @else {
+          <p class="empty">No bills due or overdue for {{ monthLabel() }}.</p>
+        }
+      </section>
+
       <section class="panel" aria-labelledby="expense-form-title">
         <h2 id="expense-form-title">Add expense</h2>
         <app-expense-form [categories]="data.categories" (recorded)="showExpenseMonth($event)" />

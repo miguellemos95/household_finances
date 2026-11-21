@@ -243,3 +243,109 @@ th {
   border: 1px solid #b9c6bc;
   border-radius: 0.35rem;
 }
+
+.bill-create {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  gap: 0.65rem;
+  margin-bottom: 1.25rem;
+}
+
+.bill-create label {
+  color: #587168;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.bill-create select,
+.bill-create input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #b9c6bc;
+  border-radius: 0.35rem;
+}
+
+.bill-create .button {
+  justify-self: start;
+}
+
+.bill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1rem;
+}
+
+.bill-card {
+  padding: 1rem;
+  border: 1px solid #d5ded6;
+  border-radius: 0.5rem;
+}
+
+.bill-card.bill-overdue {
+  border-color: #b94b3e;
+  background: #fff5f3;
+}
+
+.bill-card.bill-paid {
+  background: #f4f8f5;
+}
+
+.bill-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.bill-heading h3 {
+  margin: 0;
+  color: #20352d;
+  font-size: 1rem;
+}
+
+.bill-status {
+  color: #587168;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.bill-overdue .bill-status {
+  color: #a13d30;
+}
+
+.bill-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+.bill-actions input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #b9c6bc;
+  border-radius: 0.35rem;
+}
+
+.bill-actions .button {
+  width: 100%;
+}
+
+@media (max-width: 45rem) {
+  .bill-create {
+    grid-template-columns: 1fr;
+  }
+
+  .bill-create label,
+  .bill-create select,
+  .bill-create input,
+  .bill-create .button {
+    grid-row: auto;
+  }
+}

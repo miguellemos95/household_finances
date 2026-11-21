@@ -2,7 +2,7 @@
 
 ## Status
 
-Requirements are partially confirmed and the initial architecture is selected. GitHub issues #1-#4 are registered. Issue #1 is completed and closed: Angular and FastAPI local checks and PostgreSQL container integration pass. Issue #2 (expense and income ledger with monthly summary) is complete and closed after PR [#6](https://github.com/miguellemos95/household_finances/pull/6) merged on 2026-11-21 and its acceptance criteria were verified. Issue #3 implementation is complete and awaiting review in PR [#8](https://github.com/miguellemos95/household_finances/pull/8). Remaining product decisions must be resolved before implementing affected later issues.
+Requirements are partially confirmed and the initial architecture is selected. GitHub issues #1-#4 are registered. Issue #1 is completed and closed: Angular and FastAPI local checks and PostgreSQL container integration pass. Issue #2 (expense and income ledger with monthly summary) is complete and closed after PR [#6](https://github.com/miguellemos95/household_finances/pull/6) merged on 2026-11-21 and its acceptance criteria were verified. Issue #3 is closed after PR [#8](https://github.com/miguellemos95/household_finances/pull/8) merged. Issue #4 remains open; its implementation and layout fix were merged into `docs-run-project`, but gaps remain.
 
 ## Objective
 
@@ -132,10 +132,12 @@ Not part of issue #2: editing or deleting records, description/payee, income dat
 | Combined income | The sum of both members' incomes for a month. |
 | Remaining balance | Combined income minus combined expenses for a month; it can be negative. |
 | Category / subcategory | The expense classification taken from the workbook. |
+| Bill occurrence | One scheduled instance of a bill, with a due date and an adjustable amount. |
+| Overdue | An unpaid bill occurrence whose due date is before today. |
 
 ## Domain Model and Diagrams
 
-Domain concepts. Household, member, expense, income, and category behavior is implemented by issue #2; budget and bill behavior is pending issues #3 and #4:
+Domain concepts. Household, member, expense, income, and category behavior is implemented by issue #2; budget behavior is implemented by issue #3, and issue #4 bill behavior has remaining gaps:
 
 - **Household:** the shared financial scope. It is implicit: the application serves one household, so there is no household record.
 - **Member:** one of the two partners, with a changeable label; income is associated with a member.
@@ -250,10 +252,45 @@ sequenceDiagram
 | --- | --- | --- |
 | [#1 Scaffold Angular, FastAPI, and PostgreSQL foundation](https://github.com/miguellemos95/household_finances/issues/1) | Local app/API/database foundation, health/readiness, migrations, startup documentation, and test setup. | Completed and closed; PostgreSQL integration verified |
 | [#2 Implement household expense and income ledger](https://github.com/miguellemos95/household_finances/issues/2) | Shared dated expenses, per-partner monthly income, changeable partner labels, workbook categories, and monthly summary. Depends on #1. | Completed and verified; merged in PR [#6](https://github.com/miguellemos95/household_finances/pull/6) on 2026-11-21; issue closed |
-| [#3 Add monthly category budgets and in-app alerts](https://github.com/miguellemos95/household_finances/issues/3) | Monthly category budgets with in-app 80% warning and over-budget state. Depends on #2. | Implementation complete; PR [#8](https://github.com/miguellemos95/household_finances/pull/8) open for review |
-| [#4 Add one-off and recurring bill tracking](https://github.com/miguellemos95/household_finances/issues/4) | One-off/monthly bills, due dates, pending/paid lifecycle, adjustable occurrences, and paid-date expense accounting. Depends on #2 and #3. | Registered |
+| [#3 Add monthly category budgets and in-app alerts](https://github.com/miguellemos95/household_finances/issues/3) | Monthly category budgets with in-app 80% warning and over-budget state. Depends on #2. | Closed after PR [#8](https://github.com/miguellemos95/household_finances/pull/8) merged |
+| [#4 Add one-off and recurring bill tracking](https://github.com/miguellemos95/household_finances/issues/4) | One-off/monthly bills, due dates, pending/paid lifecycle, adjustable occurrences, and paid-date expense accounting. Depends on #2 and #3. | PRs [#10](https://github.com/miguellemos95/household_finances/pull/10) and [#11](https://github.com/miguellemos95/household_finances/pull/11) merged into `docs-run-project`; issue remains open |
 
-The user's request to register these issues and begin implementation authorized #1; the user's request on 2026-11-21 to work on #2 authorized #2. Do not start #3-#4 until their dependencies and remaining product questions are addressed.
+Issue #4 follow-up: the user approved adding bill subcategory selection, concurrency-safe occurrence generation and payment, and targeted acceptance/error tests. The fixes are in progress on `fix/issue-4-completion`; the user approved a PR targeting `master` to include the previously merged bill work. Keep issue #4 open until that PR is reviewed, merged, and its criteria rechecked.
+
+### Bill follow-up design
+
+The UI offers the selected category's optional subcategories and clears the choice when the category changes. The API locks the bill row while generating recurring occurrences, and locks each occurrence before adjusting or paying it. Payment and its shared expense are committed together; a competing payment observes the paid state and returns a conflict. Pending versus overdue is calculated on read instead of writing a potentially stale status. Monthly dates use the original due day, clamped to the last day of shorter months.
+
+```mermaid
+erDiagram
+    CATEGORIES ||--o{ BILLS : classifies
+    SUBCATEGORIES |o--o{ BILLS : refines
+    BILLS ||--o{ BILL_OCCURRENCES : schedules
+    BILL_OCCURRENCES |o--o| EXPENSES : creates_when_paid
+```
+
+```mermaid
+sequenceDiagram
+    actor Partner
+    participant UI as Angular UI
+    participant API as FastAPI
+    participant DB as PostgreSQL
+    Partner->>UI: Mark occurrence paid with amount and paid date
+    UI->>API: POST /bills/occurrences/id/pay
+    API->>DB: Lock occurrence and check status
+    alt Already paid
+        API-->>UI: 409 conflict
+    else Unpaid
+        API->>DB: Insert expense and mark occurrence paid in one transaction
+        alt Commit fails
+            DB-->>API: Error and rollback
+            API-->>UI: 503 database_unavailable
+        else Commit succeeds
+            API-->>UI: Paid occurrence
+            UI->>API: Reload summary and expenses
+        end
+    end
+```
 
 ## Tests and Failover
 
@@ -297,3 +334,15 @@ The consolidated "failover" table primarily covers application error handling; i
 | BGT-005 | #3 ledger UI; FEAT-005 | Component | Set a limit, show warning at 80%, and show exceeded above 100% | Budget saves and refreshes; warning and exceeded labels/percentages are visible | 28 frontend tests pass | Passed | `ledger-page.spec.ts` |
 | BGT-006 | #3 migration and regression | Integration / automated | Run migrations, full backend suite, frontend suite, and production build | Migration `0003_category_budgets` applies; all tests and build pass | 72 backend tests passed on SQLite; 28 frontend tests passed; Angular build and Prettier checks passed | Passed | `python -m pytest`; `npm test -- --watch=false`; `npm run build`; `npx prettier --check` |
 | BGT-007 | #3 browser write; NFR-004 | API / error path | Browser preflights a budget write from `http://localhost:4200` | API allows the `PUT` request from the configured frontend origin | As expected | Passed | `test_budget_write_allows_cross_origin_put`; browser preview |
+| BIL-001 | #4 create and list one-off bills; FEAT-006 | API | Create a due bill and read its pending status | Bill is persisted with due date, category, amount and `pending` status | Expected; SQLite run passed | Passed | `test_one_off_bill_stays_unpaid_and_is_paid_once` |
+| BIL-002 | #4 recurring occurrences; FEAT-006 | API | Create a monthly bill starting in October and read November/December | November and December occurrences use the default amount; month-end due dates are clamped | November amount and November/December due dates checked; December amount not checked | Partial | `test_monthly_bill_generates_occurrences_and_adjusted_amount` |
+| BIL-003 | #4 adjust and pay; FEAT-006 | API | Adjust an occurrence, mark it paid, then mark it paid again | Adjusted amount is saved; paid date/amount create one expense; repeated payment is rejected | Expected; SQLite run passed | Passed | `test_one_off_bill_stays_unpaid_and_is_paid_once` |
+| BIL-004 | #4 pending accounting; FEAT-006 | API | Create a pending bill and mark its paid date | Pending bills contribute zero expenses; paid date creates the monthly expense and budget spend | Expense totals checked for one month; budget spending and cross-month accounting not checked | Partial | `test_one_off_bill_stays_unpaid_and_is_paid_once` |
+| BIL-005 | #4 overdue and paid-date validation; FEAT-006 | API / error path | Read a past-due bill and submit a future paid date | Past-due bill is `overdue`; future paid date returns `422 invalid_input` and no expense | Expected; SQLite run passed | Passed | `test_overdue_bill_and_invalid_payment_are_reported` |
+| BIL-006 | #4 migrations and UI; NFR-002 | Integration / automated | Run bill migration, backend and frontend suites, production build | Migration `0004_bills` applies; bill status/accounting tests pass; Angular bill create/pay tests pass; build passes | Backend 75 passed on SQLite; Angular 30 passed; production build and touched-file Prettier check passed | Passed | `python -m pytest`; `npm test -- --watch=false`; `npm run build`; `npx prettier --check` on touched frontend files |
+| BIL-007 | #4 bill categorization | Component | Select a subcategory; switch category and select again | Matching optional subcategory is sent; old choice is cleared | Initially failed: no subcategory selector; passes after fix | Passed | `should send a selected bill subcategory and clear it when category changes` |
+| BIL-008 | #4 paid-date accounting; FEAT-006 | API | Adjust November's recurring occurrence and pay in December with a category budget | Pending counts zero; actual paid amount appears once in December expenses and budget; next occurrence retains default | As expected on SQLite and PostgreSQL | Passed | `test_bill_payment_counts_in_paid_month_and_budget` |
+| BIL-009 | #4 concurrent payments | PostgreSQL integration | Two requests concurrently pay the same occurrence | One succeeds, the other returns `409`, exactly one expense exists | Before fix both returned `200`; after fix one `200` and one `409`, one expense | Passed | `test_concurrent_bill_payments_create_one_expense` |
+| BIL-010 | #4 concurrent recurring generation | PostgreSQL integration | Two requests load the same newly generated month | Both succeed and return the same single occurrence | As expected on PostgreSQL | Passed | `test_concurrent_bill_listing_generates_one_occurrence` |
+| BIL-011 | #4 failure handling; NFR-004 | API and UI / error path | Payment commit fails; invalid bill inputs; adjustment after payment; UI payment fails | Sanitized `503` and rollback with successful retry; invalid input rejected; paid adjustment returns `409`; UI shows failure without confirmation | As expected on SQLite and PostgreSQL; UI error test passed | Passed | `test_failed_bill_payment_rolls_back_expense`; `test_invalid_bill_is_rejected`; `test_paid_bill_cannot_be_adjusted`; `should report a failed payment without confirming or refreshing` |
+| BIL-012 | #4 regression | Automated | Run complete backend suites, frontend tests and build | All pass; concurrency is verified on PostgreSQL | PostgreSQL: 85 passed; SQLite: 83 passed, 2 PostgreSQL-only concurrency tests skipped; Angular: 32 passed; production build and touched-file Prettier check passed | Passed | `python -m pytest` with dedicated `TEST_DATABASE_URL` and with temporary SQLite; `npm test -- --watch=false`; `npm run build` |

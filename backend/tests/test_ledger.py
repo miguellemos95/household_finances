@@ -1,5 +1,8 @@
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import date
+from threading import Barrier
 from unittest.mock import MagicMock
 
 import pytest
@@ -544,3 +547,265 @@ def test_failed_budget_write_is_reported_and_not_stored(
         if item["category"]["name"] == "Bills"
     )
     assert bills["limit"] is None
+
+
+def test_one_off_bill_stays_unpaid_and_is_paid_once(api: Api) -> None:
+    category = category_reference(api, "Bills", "Water")
+    created = api(
+        "POST",
+        "/bills",
+        json={
+            "recurrence": "one_off",
+            "due_date": "2025-12-20",
+            "amount": "45.00",
+            **category,
+        },
+    )
+    assert created.status_code == 201
+    assert read_month(api, "/summary", "2025-12")["total_expenses"] == "0.00"
+
+    pending = next(
+        item for item in read_month(api, "/bills", "2025-12")
+        if item["due_date"] == "2025-12-20"
+    )
+    assert pending["status"] == "pending"
+    assert pending["amount"] == "45.00"
+
+    adjusted = api(
+        "PUT",
+        f"/bills/occurrences/{pending['id']}/amount",
+        json={"amount": "43.25"},
+    )
+    assert adjusted.status_code == 200
+    assert adjusted.json()["amount"] == "43.25"
+
+    paid = api(
+        "POST",
+        f"/bills/occurrences/{pending['id']}/pay",
+        json={"paid_amount": "43.25", "paid_date": "2025-12-14"},
+    )
+    assert paid.status_code == 200
+    assert paid.json()["status"] == "paid"
+    assert paid.json()["paid_amount"] == "43.25"
+    assert paid.json()["paid_date"] == "2025-12-14"
+    assert read_month(api, "/summary", "2025-12")["total_expenses"] == "43.25"
+    assert read_month(api, "/expenses", "2025-12")[0]["amount"] == "43.25"
+
+    repeated = api(
+        "POST",
+        f"/bills/occurrences/{pending['id']}/pay",
+        json={"paid_amount": "43.25", "paid_date": "2025-12-14"},
+    )
+    assert repeated.status_code == 409
+    assert read_month(api, "/summary", "2025-12")["total_expenses"] == "43.25"
+
+
+def test_monthly_bill_generates_occurrences_and_adjusted_amount(api: Api) -> None:
+    category = category_reference(api, "Bills", "Home Internet")
+    created = api(
+        "POST",
+        "/bills",
+        json={
+            "recurrence": "monthly",
+            "due_date": "2025-10-31",
+            "amount": "40.00",
+            **category,
+        },
+    )
+    assert created.status_code == 201
+
+    november = read_month(api, "/bills", "2025-11")
+    assert any(
+        item["due_date"] == "2025-11-30"
+        and item["amount"] == "40.00"
+        for item in november
+    )
+    assert any(item["due_date"] == "2025-10-31" for item in november)
+
+    december = read_month(api, "/bills", "2025-12")
+    assert any(item["due_date"] == "2025-12-31" for item in december)
+
+
+def test_overdue_bill_and_invalid_payment_are_reported(api: Api) -> None:
+    category = category_reference(api, "Bills", "Heating")
+    created = api(
+        "POST",
+        "/bills",
+        json={
+            "recurrence": "one_off",
+            "due_date": "2025-12-10",
+            "amount": "80.00",
+            **category,
+        },
+    )
+    occurrence = next(
+        item for item in read_month(api, "/bills", "2025-12")
+        if item["id"] >= 1
+    )
+    assert created.status_code == 201
+    assert occurrence["status"] == "overdue"
+
+    future = api(
+        "POST",
+        f"/bills/occurrences/{occurrence['id']}/pay",
+        json={"paid_amount": "80.00", "paid_date": "2025-12-16"},
+    )
+    assert_invalid(future, "paid_date")
+    assert read_month(api, "/summary", "2025-12")["total_expenses"] == "0.00"
+
+
+def test_bill_payment_counts_in_paid_month_and_budget(api: Api) -> None:
+    category = category_reference(api, "Bills", "Water")
+    assert set_budget(api, "Bills", "2025-11", "100.00").status_code == 200
+    assert set_budget(api, "Bills", "2025-12", "100.00").status_code == 200
+    assert api("POST", "/bills", json={
+        "recurrence": "monthly", "due_date": "2025-11-30",
+        "amount": "40.00", **category,
+    }).status_code == 201
+    occurrence = next(
+        bill for bill in read_month(api, "/bills", "2025-11")
+        if bill["due_date"] == "2025-11-30"
+    )
+    for month in ("2025-11", "2025-12"):
+        summary = read_month(api, "/summary", month)
+        assert summary["total_expenses"] == "0.00"
+        assert summary["category_budgets"][0]["spent"] == "0.00"
+    assert api("PUT", f"/bills/occurrences/{occurrence['id']}/amount",
+               json={"amount": "80.00"}).status_code == 200
+    assert api("POST", f"/bills/occurrences/{occurrence['id']}/pay",
+               json={"paid_amount": "80.00", "paid_date": "2025-12-01"}).status_code == 200
+    november = read_month(api, "/summary", "2025-11")
+    december = read_month(api, "/summary", "2025-12")
+    assert november["total_expenses"] == "0.00"
+    assert november["category_budgets"][0]["spent"] == "0.00"
+    assert december["total_expenses"] == "80.00"
+    assert december["category_budgets"][0]["spent"] == "80.00"
+    assert december["category_budgets"][0]["state"] == "warning"
+    assert read_month(api, "/expenses", "2025-12")[0]["subcategory"]["name"] == "Water"
+    next_occurrence = next(
+        bill for bill in read_month(api, "/bills", "2025-12")
+        if bill["due_date"] == "2025-12-30"
+    )
+    assert next_occurrence["amount"] == "40.00"
+    assert next_occurrence["status"] == "pending"
+
+
+def test_failed_bill_payment_rolls_back_expense(api: Api, ledger_app: FastAPI) -> None:
+    assert api("POST", "/bills", json={
+        "recurrence": "one_off", "due_date": "2025-12-10",
+        "amount": "40.00", **category_reference(api, "Bills"),
+    }).status_code == 201
+    occurrence = read_month(api, "/bills", "2025-12")[0]
+    with failing_commits(ledger_app):
+        response = api("POST", f"/bills/occurrences/{occurrence['id']}/pay",
+                       json={"paid_amount": "40.00", "paid_date": "2025-12-10"})
+    assert_sanitized_storage_failure(response)
+    assert read_month(api, "/expenses", "2025-12") == []
+    assert read_month(api, "/bills", "2025-12")[0]["status"] == "overdue"
+    assert api("POST", f"/bills/occurrences/{occurrence['id']}/pay",
+               json={"paid_amount": "40.00", "paid_date": "2025-12-10"}).status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("overrides", "field"),
+    [
+        ({"recurrence": "weekly"}, "recurrence"),
+        ({"amount": "0"}, "amount"),
+        ({"due_date": "2025-02-30"}, "due_date"),
+        ({"category_id": 9999}, "category_id"),
+        ({"subcategory_id": 9999}, "subcategory_id"),
+    ],
+)
+def test_invalid_bill_is_rejected(api: Api, overrides: dict, field: str) -> None:
+    response = api("POST", "/bills", json={
+        "recurrence": "monthly", "due_date": "2025-12-10", "amount": "40.00",
+        **category_reference(api, "Bills"), **overrides,
+    })
+    assert_invalid(response, field)
+    assert read_month(api, "/bills", "2025-12") == []
+
+
+def test_paid_bill_cannot_be_adjusted(api: Api) -> None:
+    assert api("POST", "/bills", json={
+        "recurrence": "one_off", "due_date": "2025-12-10",
+        "amount": "40.00", **category_reference(api, "Bills"),
+    }).status_code == 201
+    occurrence = read_month(api, "/bills", "2025-12")[0]
+    assert api("POST", f"/bills/occurrences/{occurrence['id']}/pay",
+               json={"paid_amount": "40.00", "paid_date": "2025-12-10"}).status_code == 200
+    response = api("PUT", f"/bills/occurrences/{occurrence['id']}/amount",
+                   json={"amount": "20.00"})
+    assert response.status_code == 409
+    assert read_month(api, "/expenses", "2025-12")[0]["amount"] == "40.00"
+
+
+def test_concurrent_bill_payments_create_one_expense(api: Api, ledger_app: FastAPI) -> None:
+    if ledger_app.state.database_engine.dialect.name != "postgresql":
+        pytest.skip("Concurrent transaction test requires PostgreSQL.")
+    assert api("POST", "/bills", json={
+        "recurrence": "one_off", "due_date": "2025-12-10",
+        "amount": "40.00", **category_reference(api, "Bills"),
+    }).status_code == 201
+    occurrence = read_month(api, "/bills", "2025-12")[0]
+    barrier = Barrier(2, timeout=10)
+    start = Barrier(2, timeout=10)
+
+    def synchronize_unlocked_reads(conn, cursor, statement, parameters, context, executemany):
+        sql = statement.lower()
+        if sql.startswith("select") and "from bill_occurrences" in sql and "for update" not in sql:
+            barrier.wait()
+
+    engine = ledger_app.state.database_engine
+    event.listen(engine, "after_cursor_execute", synchronize_unlocked_reads)
+    try:
+        def pay():
+            start.wait()
+            return api("POST", f"/bills/occurrences/{occurrence['id']}/pay",
+                       json={"paid_amount": "40.00", "paid_date": "2025-12-10"})
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(pool.map(lambda _: pay(), range(2)))
+    finally:
+        event.remove(engine, "after_cursor_execute", synchronize_unlocked_reads)
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    assert len(read_month(api, "/expenses", "2025-12")) == 1
+
+
+def test_concurrent_bill_listing_generates_one_occurrence(api: Api, ledger_app: FastAPI) -> None:
+    if ledger_app.state.database_engine.dialect.name != "postgresql":
+        pytest.skip("Concurrent transaction test requires PostgreSQL.")
+    assert api("POST", "/bills", json={
+        "recurrence": "monthly", "due_date": "2025-11-30",
+        "amount": "40.00", **category_reference(api, "Bills"),
+    }).status_code == 201
+    start = Barrier(2, timeout=10)
+    unlocked_reads = Barrier(2, timeout=10)
+
+    def synchronize_unlocked_generation(conn, cursor, statement, parameters, context, executemany):
+        sql = statement.lower()
+        if sql.startswith("select") and "from bills " in sql:
+            conn.info["bill_generation_locked"] = "for update" in sql
+        if (
+            sql.startswith("select bill_occurrences.id")
+            and isinstance(parameters, dict)
+            and date(2025, 12, 30) in parameters.values()
+            and not conn.info.get("bill_generation_locked", False)
+        ):
+            unlocked_reads.wait()
+
+    def list_bills():
+        start.wait()
+        return api("GET", "/bills", params={"month": "2025-12"})
+
+    engine = ledger_app.state.database_engine
+    event.listen(engine, "after_cursor_execute", synchronize_unlocked_generation)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(pool.map(lambda _: list_bills(), range(2)))
+    finally:
+        event.remove(engine, "after_cursor_execute", synchronize_unlocked_generation)
+    assert [response.status_code for response in responses] == [200, 200]
+    for response in responses:
+        december = [bill for bill in response.json() if bill["due_date"] == "2025-12-30"]
+        assert len(december) == 1
+        assert december[0]["amount"] == "40.00"
+    assert responses[0].json() == responses[1].json()
