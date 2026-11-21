@@ -1,8 +1,10 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
 import { HealthApi } from './health-api';
 
 @Component({
   selector: 'app-root',
+  imports: [RouterOutlet],
   templateUrl: './app-status.html',
   styleUrl: './app.scss'
 })

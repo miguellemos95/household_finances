@@ -1,0 +1,46 @@
+<article class="partner">
+  @if (renaming()) {
+    <form class="inline-form" [formGroup]="nameForm" (ngSubmit)="saveName()" novalidate>
+      <label class="visually-hidden" [attr.for]="fieldId() + '-name'">Name</label>
+      <input
+        [id]="fieldId() + '-name'"
+        type="text"
+        autocomplete="off"
+        formControlName="name"
+        [attr.maxlength]="nameMaxLength"
+      />
+      <button type="submit" class="button" [disabled]="saving()">Save</button>
+      <button type="button" class="button button-quiet" (click)="renaming.set(false)">
+        Cancel
+      </button>
+    </form>
+  } @else {
+    <div class="partner-heading">
+      <h3>{{ income().member_name }}</h3>
+      <button type="button" class="button button-quiet" (click)="startRenaming()">Rename</button>
+    </div>
+  }
+
+  @if (income().amount; as amount) {
+    <p class="partner-amount">{{ amount | currency: 'EUR' }}</p>
+  } @else {
+    <form class="inline-form" [formGroup]="incomeForm" (ngSubmit)="saveIncome()" novalidate>
+      <div class="field">
+        <label [attr.for]="fieldId() + '-amount'">Income for {{ monthLabel() }} (EUR)</label>
+        <input
+          [id]="fieldId() + '-amount'"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          placeholder="0.00"
+          formControlName="amount"
+        />
+      </div>
+      <button type="submit" class="button" [disabled]="saving()">Record income</button>
+    </form>
+  }
+
+  @if (failure(); as message) {
+    <p class="notice notice-error" role="alert">{{ message }}</p>
+  }
+</article>

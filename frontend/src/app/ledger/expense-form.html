@@ -1,0 +1,62 @@
+<form class="expense-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <div class="field">
+    <label for="expense-date">Date</label>
+    <input id="expense-date" type="date" formControlName="transactionDate" [max]="today" />
+    @if (showError(form.controls.transactionDate)) {
+      <p class="field-error">Enter a date that is not in the future.</p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="expense-amount">Amount (EUR)</label>
+    <input
+      id="expense-amount"
+      type="text"
+      inputmode="decimal"
+      autocomplete="off"
+      placeholder="0.00"
+      formControlName="amount"
+    />
+    @if (showError(form.controls.amount)) {
+      <p class="field-error">{{ amountHint }}</p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="expense-category">Category</label>
+    <select
+      id="expense-category"
+      formControlName="categoryId"
+      (change)="form.controls.subcategoryId.reset()"
+    >
+      <option [ngValue]="null">Choose a category</option>
+      @for (category of categories(); track category.id) {
+        <option [ngValue]="category.id">{{ category.name }}</option>
+      }
+    </select>
+    @if (showError(form.controls.categoryId)) {
+      <p class="field-error">Choose a category.</p>
+    }
+  </div>
+
+  @if (subcategories().length > 0) {
+    <div class="field">
+      <label for="expense-subcategory">Subcategory (optional)</label>
+      <select id="expense-subcategory" formControlName="subcategoryId">
+        <option [ngValue]="null">No subcategory</option>
+        @for (subcategory of subcategories(); track subcategory.id) {
+          <option [ngValue]="subcategory.id">{{ subcategory.name }}</option>
+        }
+      </select>
+    </div>
+  }
+
+  <button type="submit" class="button" [disabled]="saving()">Add expense</button>
+
+  @if (failure(); as message) {
+    <p class="notice notice-error" role="alert">{{ message }}</p>
+  }
+  @if (confirmation(); as message) {
+    <p class="notice notice-success" role="status">{{ message }}</p>
+  }
+</form>

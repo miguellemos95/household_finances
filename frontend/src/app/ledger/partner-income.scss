@@ -1,0 +1,38 @@
+.partner {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem 0;
+  border-top: 1px solid #d5ded6;
+}
+
+.partner-heading,
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.partner-heading {
+  align-items: center;
+  justify-content: space-between;
+}
+
+h3 {
+  margin: 0;
+  color: #233b32;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.partner-amount {
+  margin: 0;
+  color: #20352d;
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.field,
+.inline-form > input {
+  flex: 1 1 10rem;
+}

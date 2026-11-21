@@ -31,55 +31,25 @@
 }
 
 .environment,
-.eyebrow,
 .system-line {
 	color: #587168;
 	font-size: 0.75rem;
 	font-weight: 600;
 }
 
-.environment,
-.eyebrow {
+.environment {
 	letter-spacing: 0.08em;
 }
 
-.readiness {
-	width: min(100%, 56rem);
-	margin: auto;
-	padding: 5rem 0;
-}
-
-.eyebrow {
-	margin: 0 0 1.25rem;
-	color: #a45b35;
-}
-
-h1 {
-	max-width: 13ch;
-	margin: 0;
-	color: #20352d;
-	font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
-	font-size: 3.25rem;
-	font-weight: 500;
-	line-height: 1.05;
-}
-
-.description {
-	max-width: 38rem;
-	margin: 1.5rem 0 2rem;
-	color: #50635c;
-	font-size: 1.05rem;
-	line-height: 1.6;
+.content {
+	flex: 1;
 }
 
 .api-status {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.65rem;
-	min-height: 2.5rem;
 	color: #263d33;
-	font-size: 0.9rem;
-	font-weight: 600;
 }
 
 .status-indicator {
@@ -108,19 +78,11 @@ h1 {
 }
 
 @media (max-width: 38rem) {
-	h1 {
-		font-size: 2.5rem;
-	}
-
 	.topbar {
 		min-height: 4rem;
 	}
 
 	.environment {
 		font-size: 0.65rem;
-	}
-
-	.readiness {
-		padding: 3.5rem 0;
 	}
 }
