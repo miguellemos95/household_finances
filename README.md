@@ -2,6 +2,8 @@
 
 Angular frontend and FastAPI backend for a shared household finance application.
 
+Project requirements, decisions, and test evidence are documented in [Project Context](context/README.md).
+
 ## Requirements
 
 - Node.js 22.12 or newer in the 22.x line
@@ -16,7 +18,7 @@ From the repository root:
 docker compose up -d db
 ```
 
-The local database uses development-only credentials from `compose.yaml`. Do not reuse them outside local development.
+The local database uses development-only credentials from `compose.yaml`. Do not reuse them outside local development. The configured port is published on all host interfaces, so network access depends on your firewall; this setup is not intended for production.
 
 ## Start the API
 
