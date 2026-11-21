@@ -1,7 +1,18 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  HostListener,
+  OnInit,
+  QueryList,
+  ViewChild,
+  ViewChildren,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subject, catchError, forkJoin, map, of, switchMap } from 'rxjs';
+import { Subject, catchError, finalize, forkJoin, map, of, switchMap } from 'rxjs';
 import { describeApiError } from './api-error';
 import { ExpenseForm } from './expense-form';
 import {
@@ -22,6 +33,27 @@ interface MonthLedger {
   bills: BillOccurrence[];
 }
 
+type LedgerSection = 'overview' | 'expenses' | 'bills' | 'budgets';
+type EntryDialog = 'expense' | 'bill';
+
+interface BillDraft {
+  recurrence: string;
+  dueDate: string;
+  amount: string;
+  category: string;
+  subcategory: string;
+}
+
+function sameAmount(first: string, second: string): boolean {
+  const normalize = (value: string): string => {
+    const text = value.trim().replace(',', '.');
+    if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return text;
+    const [whole, fraction = ''] = text.split('.');
+    return `${whole.replace(/^0+(?=\d)/, '')}.${fraction.padEnd(2, '0')}`;
+  };
+  return normalize(first) === normalize(second);
+}
+
 @Component({
   selector: 'app-ledger-page',
   imports: [CurrencyPipe, DatePipe, ExpenseForm, PartnerIncome],
@@ -31,7 +63,32 @@ interface MonthLedger {
 export class LedgerPage implements OnInit {
   private readonly api = inject(LedgerApi);
   private readonly loads = new Subject<string>();
+  @ViewChild(ExpenseForm) private expenseForm?: ExpenseForm;
+  @ViewChild('expenseDialog') private expenseDialog?: ElementRef<HTMLDialogElement>;
+  @ViewChild('billDialog') private billDialog?: ElementRef<HTMLDialogElement>;
+  @ViewChild('billCreateForm') private billCreateForm?: ElementRef<HTMLFormElement>;
+  @ViewChildren(PartnerIncome) private partnerIncomes!: QueryList<PartnerIncome>;
+  @ViewChild('billRecurrence') private billRecurrence?: ElementRef<HTMLSelectElement>;
+  @ViewChild('billDueDate') private billDueDate?: ElementRef<HTMLInputElement>;
+  @ViewChild('billAmount') private billAmount?: ElementRef<HTMLInputElement>;
+  @ViewChild('billCategory') private billCategory?: ElementRef<HTMLSelectElement>;
+  @ViewChild('billSubcategory') private billSubcategory?: ElementRef<HTMLSelectElement>;
+  @ViewChildren('budgetInput') private budgetInputs!: QueryList<ElementRef<HTMLInputElement>>;
+  @ViewChildren('billAmountInput') private billAmountInputs!: QueryList<
+    ElementRef<HTMLInputElement>
+  >;
+  @ViewChildren('billPaidDate') private billPaidDates!: QueryList<ElementRef<HTMLInputElement>>;
+  private billDraftBaseline: BillDraft = this.emptyBillDraft();
 
+  protected readonly section = signal<LedgerSection>('overview');
+  protected readonly expenseSaved = signal(false);
+  protected readonly billSaving = signal(false);
+  protected readonly sections: { id: LedgerSection; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'expenses', label: 'Expenses' },
+    { id: 'bills', label: 'Bills' },
+    { id: 'budgets', label: 'Budgets' },
+  ];
   protected readonly month = signal(toMonth(new Date()));
   protected readonly monthLabel = computed(() => formatMonth(this.month()));
   protected readonly ledger = signal<MonthLedger | null>(null);
@@ -79,15 +136,42 @@ export class LedgerPage implements OnInit {
     this.reload();
   }
 
+  @HostListener('window:beforeunload', ['$event'])
+  protected beforeUnload(event: BeforeUnloadEvent): void {
+    const expenseChanged =
+      this.expenseDialog?.nativeElement.open && this.expenseForm?.hasUnsavedChanges();
+    const billChanged = this.billDialog?.nativeElement.open && this.billDraftChanged();
+    if (expenseChanged || billChanged) {
+      event.preventDefault();
+      event.returnValue = ' ';
+    }
+  }
+
   protected reload(): void {
     this.loads.next(this.month());
   }
 
-  protected selectMonth(month: string): void {
-    if (isMonth(month)) {
-      this.month.set(month);
-      this.reload();
+  protected selectMonth(month: string, input?: HTMLInputElement): void {
+    if (!isMonth(month)) {
+      if (input) input.value = this.month();
+      return;
     }
+    if (
+      month !== this.month() &&
+      this.hasUnsavedChanges() &&
+      !window.confirm('You have unsaved changes. Discard them and change month?')
+    ) {
+      if (input) input.value = this.month();
+      return;
+    }
+    if (month !== this.month()) {
+      this.expenseSaved.set(false);
+      this.billDraftBaseline = this.emptyBillDraft();
+      this.billCategoryId.set(null);
+      this.billSubcategoryId.set(null);
+    }
+    this.month.set(month);
+    this.reload();
   }
 
   protected moveMonth(offset: number): void {
@@ -95,7 +179,96 @@ export class LedgerPage implements OnInit {
   }
 
   protected showExpenseMonth(expense: Expense): void {
+    this.expenseDialog?.nativeElement.close();
     this.selectMonth(expense.transaction_date.slice(0, 7));
+    this.expenseSaved.set(true);
+  }
+
+  protected openDialog(kind: EntryDialog): void {
+    if (kind === 'expense') {
+      this.expenseSaved.set(false);
+      this.expenseDialog?.nativeElement.showModal();
+    } else {
+      this.billSaved.set(false);
+      this.billError.set(null);
+      this.billDialog?.nativeElement.showModal();
+    }
+  }
+
+  protected requestCloseDialog(kind: EntryDialog, event?: Event): void {
+    event?.preventDefault();
+    if (kind === 'expense' ? this.expenseForm?.isSaving() : this.billSaving()) return;
+    if (kind === 'expense') {
+      this.expenseForm?.resetEntry();
+      this.expenseDialog?.nativeElement.close();
+    } else {
+      this.resetBillEntry();
+      this.billDialog?.nativeElement.close();
+    }
+  }
+
+  protected expenseIsSaving(): boolean {
+    return this.expenseForm?.isSaving() ?? false;
+  }
+
+  private emptyBillDraft(): BillDraft {
+    return { recurrence: 'one_off', dueDate: '', amount: '', category: '0', subcategory: '' };
+  }
+
+  private currentBillDraft(): BillDraft {
+    return {
+      recurrence: this.billRecurrence?.nativeElement.value ?? 'one_off',
+      dueDate: this.billDueDate?.nativeElement.value ?? '',
+      amount: this.billAmount?.nativeElement.value ?? '',
+      category: this.billCategory?.nativeElement.value ?? '0',
+      subcategory: this.billSubcategory?.nativeElement.value ?? '',
+    };
+  }
+
+  private resetBillEntry(): void {
+    this.billCreateForm?.nativeElement.reset();
+    this.billCategoryId.set(null);
+    this.billSubcategoryId.set(null);
+    this.billDraftBaseline = this.emptyBillDraft();
+    this.billError.set(null);
+  }
+
+  private billDraftChanged(): boolean {
+    const bill = this.currentBillDraft();
+    return (
+      bill.recurrence !== this.billDraftBaseline.recurrence ||
+      bill.dueDate !== this.billDraftBaseline.dueDate ||
+      bill.amount !== this.billDraftBaseline.amount ||
+      bill.category !== this.billDraftBaseline.category ||
+      bill.subcategory !== this.billDraftBaseline.subcategory
+    );
+  }
+
+  private hasUnsavedChanges(): boolean {
+    const ledger = this.visibleLedger();
+    if (!ledger) return false;
+    if (
+      this.expenseForm?.hasUnsavedChanges() ||
+      this.partnerIncomes.some((partner) => partner.hasUnsavedChanges())
+    ) {
+      return true;
+    }
+    if (this.billDraftChanged()) return true;
+    return (
+      this.budgetInputs.some(({ nativeElement }) => {
+        const budget = ledger.summary.category_budgets.find(
+          (item) => `budget-${item.category.id}` === nativeElement.id,
+        );
+        return budget !== undefined && !sameAmount(nativeElement.value, budget.limit ?? '');
+      }) ||
+      this.billAmountInputs.some(({ nativeElement }) => {
+        const occurrence = ledger.bills.find(
+          (item) => `bill-occurrence-${item.id}` === nativeElement.id,
+        );
+        return occurrence !== undefined && !sameAmount(nativeElement.value, occurrence.amount);
+      }) ||
+      this.billPaidDates.some(({ nativeElement }) => nativeElement.value !== this.today)
+    );
   }
 
   protected isNegative(amount: string): boolean {
@@ -160,6 +333,7 @@ export class LedgerPage implements OnInit {
       this.billSaved.set(false);
       return;
     }
+    this.billSaving.set(true);
     this.api
       .recordBill({
         recurrence: recurrence.value as 'one_off' | 'monthly',
@@ -168,8 +342,11 @@ export class LedgerPage implements OnInit {
         category_id: categoryId,
         subcategory_id: this.billSubcategoryId(),
       })
+      .pipe(finalize(() => this.billSaving.set(false)))
       .subscribe({
         next: () => {
+          this.resetBillEntry();
+          this.billDialog?.nativeElement.close();
           this.billError.set(null);
           this.billSaved.set(true);
           this.reload();

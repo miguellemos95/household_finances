@@ -42,8 +42,16 @@ export class PartnerIncome {
   protected readonly saving = signal(false);
   protected readonly failure = signal<string | null>(null);
 
+  hasUnsavedChanges(): boolean {
+    return (
+      this.incomeForm.getRawValue().amount !== '' ||
+      (this.renaming() && this.nameForm.getRawValue().name !== this.income().member_name)
+    );
+  }
+
   protected startRenaming(): void {
     this.nameForm.setValue({ name: this.income().member_name });
+    this.nameForm.markAsPristine();
     this.failure.set(null);
     this.renaming.set(true);
   }

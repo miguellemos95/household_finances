@@ -40,6 +40,7 @@ export class ExpenseForm {
     categoryId: new FormControl<number | null>(null, [Validators.required]),
     subcategoryId: new FormControl<number | null>(null),
   });
+  private savedValues = this.form.getRawValue();
   private readonly categoryId = toSignal(this.form.controls.categoryId.valueChanges, {
     initialValue: null,
   });
@@ -49,7 +50,31 @@ export class ExpenseForm {
   );
   protected readonly saving = signal(false);
   protected readonly failure = signal<string | null>(null);
-  protected readonly confirmation = signal<string | null>(null);
+
+  hasUnsavedChanges(): boolean {
+    const current = this.form.getRawValue();
+    return (
+      current.transactionDate !== this.savedValues.transactionDate ||
+      current.amount !== this.savedValues.amount ||
+      current.categoryId !== this.savedValues.categoryId ||
+      current.subcategoryId !== this.savedValues.subcategoryId
+    );
+  }
+
+  isSaving(): boolean {
+    return this.saving();
+  }
+
+  resetEntry(): void {
+    this.form.reset({
+      transactionDate: this.today,
+      amount: '',
+      categoryId: null,
+      subcategoryId: null,
+    });
+    this.savedValues = this.form.getRawValue();
+    this.failure.set(null);
+  }
 
   protected showError(control: AbstractControl): boolean {
     return control.invalid && control.touched;
@@ -57,8 +82,8 @@ export class ExpenseForm {
 
   protected submit(): void {
     this.failure.set(null);
-    this.confirmation.set(null);
-    const { transactionDate, amount, categoryId, subcategoryId } = this.form.getRawValue();
+    const submitted = this.form.getRawValue();
+    const { transactionDate, amount, categoryId, subcategoryId } = submitted;
     const parsedAmount = parseAmount(amount);
     if (this.form.invalid || parsedAmount === null || categoryId === null) {
       this.form.markAllAsTouched();
@@ -76,8 +101,7 @@ export class ExpenseForm {
       .pipe(finalize(() => this.saving.set(false)))
       .subscribe({
         next: (expense) => {
-          this.form.controls.amount.reset();
-          this.confirmation.set('Expense recorded.');
+          this.resetEntry();
           this.recorded.emit(expense);
         },
         error: (error: unknown) =>

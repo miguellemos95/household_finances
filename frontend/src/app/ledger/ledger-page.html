@@ -12,7 +12,7 @@
         #monthInput
         type="month"
         [value]="month()"
-        (change)="selectMonth(monthInput.value)"
+        (change)="selectMonth(monthInput.value, monthInput)"
       />
       <button type="button" class="button button-quiet" (click)="moveMonth(1)">Next</button>
     </div>
@@ -25,83 +25,127 @@
     </div>
   }
 
-  @if (visibleLedger(); as data) {
-    <dl class="summary">
-      <div class="figure">
-        <dt>Combined income</dt>
-        <dd>{{ data.summary.total_income | currency: 'EUR' }}</dd>
-      </div>
-      <div class="figure">
-        <dt>Household expenses</dt>
-        <dd>{{ data.summary.total_expenses | currency: 'EUR' }}</dd>
-      </div>
-      <div class="figure" [class.figure-negative]="isNegative(data.summary.balance)">
-        <dt>Remaining balance</dt>
-        <dd>{{ data.summary.balance | currency: 'EUR' }}</dd>
-      </div>
-    </dl>
+  <nav class="tabs" aria-label="Ledger sections">
+    @for (item of sections; track item.id) {
+      <button
+        type="button"
+        class="tab"
+        [attr.aria-pressed]="section() === item.id"
+        (click)="section.set(item.id)"
+      >
+        {{ item.label }}
+      </button>
+    }
+  </nav>
 
-    <div class="panels">
+  @if (visibleLedger(); as data) {
+    <div class="section-content" [hidden]="section() !== 'overview'">
+      <dl class="summary">
+        <div class="figure">
+          <dt>Combined income</dt>
+          <dd>{{ data.summary.total_income | currency: 'EUR' }}</dd>
+        </div>
+        <div class="figure">
+          <dt>Household expenses</dt>
+          <dd>{{ data.summary.total_expenses | currency: 'EUR' }}</dd>
+        </div>
+        <div class="figure" [class.figure-negative]="isNegative(data.summary.balance)">
+          <dt>Remaining balance</dt>
+          <dd>{{ data.summary.balance | currency: 'EUR' }}</dd>
+        </div>
+      </dl>
+
       <section class="panel" aria-labelledby="income-title">
         <h2 id="income-title">Income</h2>
         @for (income of data.summary.incomes; track income.member_id + ':' + month()) {
           <app-partner-income [income]="income" [month]="data.summary.month" (changed)="reload()" />
         }
       </section>
+    </div>
 
+    <div class="section-content" [hidden]="section() !== 'bills'">
       <section class="panel bill-panel" aria-labelledby="bills-title">
-        <h2 id="bills-title">Bills</h2>
+        <div class="section-heading">
+          <h2 id="bills-title">Bills</h2>
+          <button type="button" class="button" (click)="openDialog('bill')">Add bill</button>
+        </div>
         @if (billSaved()) {
           <p class="notice notice-success" role="status">Bill saved or marked paid.</p>
         }
-        @if (billError(); as error) {
+        @if (billError() && !billDialog.open) {
+          @let error = billError();
           <p class="notice notice-error" role="alert">The bill was not saved. {{ error }}</p>
         }
 
-        <form
-          class="bill-create"
-          (submit)="
-            recordBill(billRecurrence, billDueDate, billAmount, billCategory);
-            $event.preventDefault()
-          "
+        <dialog
+          #billDialog
+          class="entry-dialog"
+          aria-labelledby="bill-dialog-title"
+          (cancel)="requestCloseDialog('bill', $event)"
+          (keydown.escape)="requestCloseDialog('bill', $event)"
         >
-          <label for="bill-recurrence">Type</label>
-          <select id="bill-recurrence" #billRecurrence>
-            <option value="one_off">One-off</option>
-            <option value="monthly">Monthly recurring</option>
-          </select>
-          <label for="bill-due-date">Due date</label>
-          <input id="bill-due-date" type="date" #billDueDate />
-          <label for="bill-amount">Amount (EUR)</label>
-          <input id="bill-amount" type="text" inputmode="decimal" #billAmount />
-          <label for="bill-category">Category</label>
-          <select
-            id="bill-category"
-            #billCategory
-            [value]="billCategoryId() ?? 0"
-            (change)="selectBillCategory(billCategory.value)"
-          >
-            <option value="0">Choose a category</option>
-            @for (category of data.categories; track category.id) {
-              <option [value]="category.id">{{ category.name }}</option>
-            }
-          </select>
-          @if (billSubcategories().length > 0) {
-            <label for="bill-subcategory">Subcategory (optional)</label>
-            <select
-              id="bill-subcategory"
-              #billSubcategory
-              [value]="billSubcategoryId() ?? ''"
-              (change)="selectBillSubcategory(billSubcategory.value)"
+          <div class="dialog-heading">
+            <h2 id="bill-dialog-title">Add bill</h2>
+            <button
+              type="button"
+              class="button button-quiet"
+              [disabled]="billSaving()"
+              (click)="requestCloseDialog('bill')"
             >
-              <option value="">No subcategory</option>
-              @for (subcategory of billSubcategories(); track subcategory.id) {
-                <option [value]="subcategory.id">{{ subcategory.name }}</option>
-              }
-            </select>
+              Close
+            </button>
+          </div>
+          @if (billError(); as error) {
+            <p class="notice notice-error" role="alert">The bill was not saved. {{ error }}</p>
           }
-          <button type="submit" class="button">Add bill</button>
-        </form>
+          <form
+            #billCreateForm
+            class="bill-create"
+            (submit)="
+              recordBill(billRecurrence, billDueDate, billAmount, billCategory);
+              $event.preventDefault()
+            "
+          >
+            <fieldset [disabled]="billSaving()">
+              <label for="bill-recurrence">Type</label>
+              <select id="bill-recurrence" #billRecurrence>
+                <option value="one_off">One-off</option>
+                <option value="monthly">Monthly recurring</option>
+              </select>
+              <label for="bill-due-date">Due date</label>
+              <input id="bill-due-date" type="date" #billDueDate />
+              <label for="bill-amount">Amount (EUR)</label>
+              <input id="bill-amount" type="text" inputmode="decimal" #billAmount />
+              <label for="bill-category">Category</label>
+              <select
+                id="bill-category"
+                #billCategory
+                [value]="billCategoryId() ?? 0"
+                (change)="selectBillCategory(billCategory.value)"
+              >
+                <option value="0">Choose a category</option>
+                @for (category of data.categories; track category.id) {
+                  <option [value]="category.id">{{ category.name }}</option>
+                }
+              </select>
+              @if (billSubcategories().length > 0) {
+                <label for="bill-subcategory">Subcategory (optional)</label>
+                <select
+                  id="bill-subcategory"
+                  #billSubcategory
+                  [value]="billSubcategoryId() ?? ''"
+                  (change)="selectBillSubcategory(billSubcategory.value)"
+                >
+                  <option value="">No subcategory</option>
+                  @for (subcategory of billSubcategories(); track subcategory.id) {
+                    <option [value]="subcategory.id">{{ subcategory.name }}</option>
+                  }
+                </select>
+              }
+              <button type="submit" class="button">Add bill</button>
+            </fieldset>
+          </form>
+        </dialog>
 
         @if (data.bills.length > 0) {
           <div class="bill-grid">
@@ -165,42 +209,69 @@
           <p class="empty">No bills due or overdue for {{ monthLabel() }}.</p>
         }
       </section>
+    </div>
 
-      <section class="panel" aria-labelledby="expense-form-title">
-        <h2 id="expense-form-title">Add expense</h2>
-        <app-expense-form [categories]="data.categories" (recorded)="showExpenseMonth($event)" />
+    <div class="section-content" [hidden]="section() !== 'expenses'">
+      <section class="panel" aria-labelledby="expenses-title">
+        <div class="section-heading">
+          <h2 id="expenses-title">Expenses</h2>
+          <button type="button" class="button" (click)="openDialog('expense')">Add expense</button>
+        </div>
+        @if (expenseSaved()) {
+          <p class="notice notice-success" role="status">Expense recorded.</p>
+        }
+        <dialog
+          #expenseDialog
+          class="entry-dialog"
+          aria-labelledby="expense-dialog-title"
+          (cancel)="requestCloseDialog('expense', $event)"
+          (keydown.escape)="requestCloseDialog('expense', $event)"
+        >
+          <div class="dialog-heading">
+            <h2 id="expense-dialog-title">Add expense</h2>
+            <button
+              type="button"
+              class="button button-quiet"
+              [disabled]="expenseIsSaving()"
+              (click)="requestCloseDialog('expense')"
+            >
+              Close
+            </button>
+          </div>
+          <app-expense-form [categories]="data.categories" (recorded)="showExpenseMonth($event)" />
+        </dialog>
+        @if (data.expenses.length > 0) {
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Category</th>
+                <th scope="col">Subcategory</th>
+                <th scope="col" class="numeric">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (expense of data.expenses; track expense.id) {
+                <tr>
+                  <td>{{ expense.transaction_date | date: 'd MMM y' }}</td>
+                  <td>{{ expense.category.name }}</td>
+                  <td>{{ expense.subcategory?.name ?? '—' }}</td>
+                  <td class="numeric">{{ expense.amount | currency: 'EUR' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        } @else {
+          <p class="empty">No expenses recorded for {{ monthLabel() }}.</p>
+        }
       </section>
     </div>
 
-    <section class="panel" aria-labelledby="expenses-title">
-      <h2 id="expenses-title">Expenses</h2>
-      @if (data.expenses.length > 0) {
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Date</th>
-              <th scope="col">Category</th>
-              <th scope="col">Subcategory</th>
-              <th scope="col" class="numeric">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (expense of data.expenses; track expense.id) {
-              <tr>
-                <td>{{ expense.transaction_date | date: 'd MMM y' }}</td>
-                <td>{{ expense.category.name }}</td>
-                <td>{{ expense.subcategory?.name ?? '—' }}</td>
-                <td class="numeric">{{ expense.amount | currency: 'EUR' }}</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      } @else {
-        <p class="empty">No expenses recorded for {{ monthLabel() }}.</p>
-      }
-    </section>
-
-    <section class="panel budget-panel" aria-labelledby="budgets-title">
+    <section
+      class="panel budget-panel"
+      aria-labelledby="budgets-title"
+      [hidden]="section() !== 'budgets'"
+    >
       <h2 id="budgets-title">Monthly budgets</h2>
       @if (budgetSaved()) {
         <p class="notice notice-success" role="status">Budget saved.</p>

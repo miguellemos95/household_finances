@@ -99,11 +99,65 @@ h2 {
   color: #a13d30;
 }
 
-.panels {
+.section-content {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  align-items: start;
   gap: 1rem;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  border-bottom: 1px solid #cbd8ce;
+}
+
+.tab {
+  padding: 0.8rem 1.1rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: #587168;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab[aria-pressed='true'] {
+  border-bottom-color: #a45b35;
+  color: #20352d;
+}
+
+.section-heading,
+.dialog-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.section-heading h2,
+.dialog-heading h2 {
+  margin: 0;
+}
+
+.entry-dialog {
+  width: min(32rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  padding: 1.5rem;
+  border: 1px solid #d5ded6;
+  border-radius: 0.6rem;
+  background: #fff;
+  color: #20352d;
+}
+
+.entry-dialog::backdrop {
+  background: rgba(32, 53, 45, 0.5);
 }
 
 table {
@@ -245,11 +299,16 @@ th {
 }
 
 .bill-create {
-  display: grid;
-  grid-template-columns: 1fr;
-  align-items: stretch;
-  gap: 0.65rem;
   margin-bottom: 1.25rem;
+}
+
+.bill-create fieldset {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .bill-create label {
@@ -335,17 +394,4 @@ th {
 
 .bill-actions .button {
   width: 100%;
-}
-
-@media (max-width: 45rem) {
-  .bill-create {
-    grid-template-columns: 1fr;
-  }
-
-  .bill-create label,
-  .bill-create select,
-  .bill-create input,
-  .bill-create .button {
-    grid-row: auto;
-  }
 }

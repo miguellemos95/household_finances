@@ -41,6 +41,7 @@ Feature-level requirements are tracked in [Personal Expense Tracking](personal-e
 | Feature / use case | Status | Ticket |
 | --- | --- | --- |
 | [Personal expense tracking](personal-expense-tracking.md) | Issues #1-#4 closed; #4 completed and merged into `master` in PR #13 | [#1](https://github.com/miguellemos95/household_finances/issues/1), [#2](https://github.com/miguellemos95/household_finances/issues/2), [#3](https://github.com/miguellemos95/household_finances/issues/3), [#4](https://github.com/miguellemos95/household_finances/issues/4) |
+| [Ledger UI organization](ledger-ui-organization.md) | Locally verified with browser limitation; ready for review | [#15](https://github.com/miguellemos95/household_finances/issues/15) |
 
 Each future feature/use-case document must capture:
 
