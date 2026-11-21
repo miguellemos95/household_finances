@@ -112,8 +112,9 @@ def adjust_bill_amount(
     occurrence_id: Annotated[int, Path(ge=1, le=MAX_ENTITY_ID)],
     change: BillOccurrenceAmount,
     session: SessionDependency,
+    today: Annotated[date, Depends(get_today)],
 ):
-    return ledger_service.adjust_bill_occurrence(session, occurrence_id, change.amount)
+    return ledger_service.adjust_bill_occurrence(session, occurrence_id, change.amount, today)
 
 
 @router.post("/bills/occurrences/{occurrence_id}/pay", response_model=BillOccurrenceRead)

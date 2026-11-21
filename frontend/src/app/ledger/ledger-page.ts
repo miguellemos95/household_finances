@@ -44,6 +44,13 @@ export class LedgerPage implements OnInit {
   protected readonly budgetSaved = signal(false);
   protected readonly billError = signal<string | null>(null);
   protected readonly billSaved = signal(false);
+  protected readonly billCategoryId = signal<number | null>(null);
+  protected readonly billSubcategoryId = signal<number | null>(null);
+  protected readonly billSubcategories = computed(
+    () =>
+      this.visibleLedger()?.categories.find((category) => category.id === this.billCategoryId())
+        ?.subcategories ?? [],
+  );
   protected readonly today = toIsoDate(new Date());
 
   constructor() {
@@ -126,6 +133,15 @@ export class LedgerPage implements OnInit {
     return Math.min(Number(budget.percent), 100);
   }
 
+  protected selectBillCategory(value: string): void {
+    this.billCategoryId.set(Number(value) || null);
+    this.billSubcategoryId.set(null);
+  }
+
+  protected selectBillSubcategory(value: string): void {
+    this.billSubcategoryId.set(Number(value) || null);
+  }
+
   protected recordBill(
     recurrence: HTMLSelectElement,
     dueDate: HTMLInputElement,
@@ -150,7 +166,7 @@ export class LedgerPage implements OnInit {
         due_date: dueDate.value,
         amount: parsedAmount,
         category_id: categoryId,
-        subcategory_id: null,
+        subcategory_id: this.billSubcategoryId(),
       })
       .subscribe({
         next: () => {
@@ -166,6 +182,7 @@ export class LedgerPage implements OnInit {
   }
 
   protected adjustBillAmount(bill: BillOccurrence, amountInput: HTMLInputElement): void {
+    this.billSaved.set(false);
     const amount = amountInput.value.trim().replace(',', '.');
     if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
       this.billError.set('Enter a bill amount greater than 0.');
@@ -185,6 +202,7 @@ export class LedgerPage implements OnInit {
     amountInput: HTMLInputElement,
     dateInput: HTMLInputElement,
   ): void {
+    this.billSaved.set(false);
     this.api.payBill(bill.id, amountInput.value, dateInput.value).subscribe({
       next: () => {
         this.billError.set(null);

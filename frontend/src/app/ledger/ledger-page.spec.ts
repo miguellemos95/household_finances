@@ -391,6 +391,7 @@ describe('LedgerPage', () => {
       category_id: 1,
       subcategory_id: null,
     });
+
     request.flush({
       id: 1,
       recurrence: 'monthly',
@@ -403,6 +404,24 @@ describe('LedgerPage', () => {
     flushLedger();
 
     expect(page.textContent).toContain('Bill saved or marked paid.');
+  });
+
+  it('should send a selected bill subcategory and clear it when category changes', () => {
+    flushLedger();
+    type('#bill-due-date', '2025-11-20');
+    type('#bill-amount', '45.00');
+    choose('#bill-category', 1);
+    choose('#bill-subcategory', 2);
+    choose('#bill-category', 2);
+    expect(page.querySelector('#bill-subcategory')).toBeNull();
+    choose('#bill-category', 1);
+    expect(element<HTMLSelectElement>('#bill-subcategory').value).toBe('');
+    choose('#bill-subcategory', 2);
+    submitFormOf('#bill-amount');
+    const request = http.expectOne(`${api}/bills`);
+    expect(request.request.body.subcategory_id).toBe(4);
+    request.flush({ id: 1 });
+    flushLedger();
   });
 
   it('should mark a pending bill paid and refresh totals', () => {
@@ -440,6 +459,37 @@ describe('LedgerPage', () => {
     flushLedger('2025-11', summary({ total_expenses: '57.36', balance: '3996.14' }));
 
     expect(page.textContent).toContain('Bill saved or marked paid.');
+  });
+
+  it('should report a failed payment without confirming or refreshing', () => {
+    const bill: BillOccurrence = {
+      id: 9,
+      bill: {
+        id: 2,
+        recurrence: 'one_off',
+        first_due_date: '2025-11-10',
+        due_day: null,
+        default_amount: '45.00',
+        category: { id: 1, name: 'Bills' },
+        subcategory: null,
+      },
+      due_date: '2025-11-10',
+      amount: '45.00',
+      status: 'overdue',
+      paid_amount: null,
+      paid_date: null,
+    };
+    flushLedger('2025-11', summary(), [INTERNET], [bill]);
+    clickButton('Mark paid');
+    http
+      .expectOne(`${api}/bills/occurrences/9/pay`)
+      .flush(DATABASE_UNAVAILABLE, { status: 503, statusText: 'Service Unavailable' });
+    fixture.detectChanges();
+
+    expect(page.textContent).toContain('The bill was not saved. Database is unavailable.');
+    expect(page.textContent).not.toContain('Bill saved or marked paid.');
+    expect(page.textContent).toContain('overdue');
+    http.expectNone(`${api}/summary?month=2025-11`);
   });
 
   it('should rename a partner and refresh the month', () => {

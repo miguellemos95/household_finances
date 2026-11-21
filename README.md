@@ -53,7 +53,7 @@ npm start
 
 On later runs, use `Set-Location frontend` and `npm start`; `npm ci` is only needed when dependencies need to be installed or restored.
 
-Open [http://localhost:4200](http://localhost:4200). The page shows the monthly household ledger, income and expense forms, and category budgets. The footer reports whether the API is reachable.
+Open [http://localhost:4200](http://localhost:4200). The page shows the monthly household ledger, income and expense forms, bills, and category budgets. The footer reports whether the API is reachable.
 
 Press **Ctrl+C** in the API and frontend terminals to stop them. To stop PostgreSQL, run `docker compose stop db` from the project root; its data remains in the Docker volume.
 
@@ -118,5 +118,9 @@ Amounts are EUR decimal strings with up to two decimals, for example `"12.36"`. 
 | `GET /incomes?month=` | Incomes recorded for the month. |
 | `GET /summary?month=` | Each partner's income, combined income, combined expenses and remaining balance. |
 | `PUT /budgets/{category_id}?month=YYYY-MM` | Set or update a category budget for a month. |
+| `POST /bills` | Create a one-off or monthly bill with a due date, amount, category and optional subcategory. |
+| `GET /bills?month=YYYY-MM` | Show occurrences due in the month, earlier unpaid occurrences, and occurrences paid in the month. |
+| `PUT /bills/occurrences/{id}/amount` | Adjust an unpaid occurrence's amount. |
+| `POST /bills/occurrences/{id}/pay` | Mark an occurrence paid with its actual `paid_amount` and `paid_date`; creates one household expense on that date. |
 
-Errors use `{"detail": {"code", "message", "errors"?}}`: `422 invalid_input` for invalid values, `404 not_found`, `409 conflict` for a second income for the same partner and month, and a sanitized `503 database_unavailable` when storage fails. A failed write is rolled back.
+Errors use `{"detail": {"code", "message", "errors"?}}`: `422 invalid_input` for invalid values, `404 not_found`, `409 conflict` for a duplicate income or an attempt to pay or adjust a paid bill, and a sanitized `503 database_unavailable` when storage fails. A failed write is rolled back.

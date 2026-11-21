@@ -266,6 +266,7 @@ def list_bill_occurrences(
         select(Bill)
         .options(joinedload(Bill.category), joinedload(Bill.subcategory))
         .order_by(Bill.id)
+        .with_for_update(of=Bill)
     ).all()
     for bill in bills:
         if bill.recurrence == "monthly":
@@ -286,6 +287,8 @@ def list_bill_occurrences(
                             status="pending",
                         )
                     )
+                if cursor == month.replace(day=1):
+                    break
                 cursor = _next_month(cursor)
     commit(session)
 
@@ -311,27 +314,25 @@ def list_bill_occurrences(
         .order_by(BillOccurrence.due_date, BillOccurrence.id)
     ).all()
 
-    changed = False
-    for occurrence in occurrences:
-        if occurrence.status != "paid":
-            expected_status = "overdue" if occurrence.due_date < today else "pending"
-            if occurrence.status != expected_status:
-                occurrence.status = expected_status
-                changed = True
-    if changed:
-        commit(session)
+    return [_bill_occurrence_read(occurrence, today) for occurrence in occurrences]
 
-    return [BillOccurrenceRead.model_validate(occurrence) for occurrence in occurrences]
+
+def _bill_occurrence_read(occurrence: BillOccurrence, today: date) -> BillOccurrenceRead:
+    result = BillOccurrenceRead.model_validate(occurrence)
+    if result.status != "paid":
+        result.status = "overdue" if result.due_date < today else "pending"
+    return result
 
 
 def adjust_bill_occurrence(
-    session: Session, occurrence_id: int, amount: Decimal
+    session: Session, occurrence_id: int, amount: Decimal, today: date
 ) -> BillOccurrenceRead:
     occurrence = session.scalar(
         select(BillOccurrence)
         .options(joinedload(BillOccurrence.bill).joinedload(Bill.category),
                  joinedload(BillOccurrence.bill).joinedload(Bill.subcategory))
         .where(BillOccurrence.id == occurrence_id)
+        .with_for_update(of=BillOccurrence)
     )
     if occurrence is None:
         raise NotFoundError("Bill occurrence does not exist.")
@@ -339,7 +340,7 @@ def adjust_bill_occurrence(
         raise ConflictError("A paid bill occurrence cannot be adjusted.")
     occurrence.amount = amount
     commit(session)
-    return BillOccurrenceRead.model_validate(occurrence)
+    return _bill_occurrence_read(occurrence, today)
 
 
 def pay_bill_occurrence(
@@ -359,6 +360,7 @@ def pay_bill_occurrence(
         .options(joinedload(BillOccurrence.bill).joinedload(Bill.category),
                  joinedload(BillOccurrence.bill).joinedload(Bill.subcategory))
         .where(BillOccurrence.id == occurrence_id)
+        .with_for_update(of=BillOccurrence)
     )
     if occurrence is None:
         raise NotFoundError("Bill occurrence does not exist.")

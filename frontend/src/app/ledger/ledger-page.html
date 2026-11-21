@@ -75,12 +75,31 @@
           <label for="bill-amount">Amount (EUR)</label>
           <input id="bill-amount" type="text" inputmode="decimal" #billAmount />
           <label for="bill-category">Category</label>
-          <select id="bill-category" #billCategory>
+          <select
+            id="bill-category"
+            #billCategory
+            [value]="billCategoryId() ?? 0"
+            (change)="selectBillCategory(billCategory.value)"
+          >
             <option value="0">Choose a category</option>
             @for (category of data.categories; track category.id) {
               <option [value]="category.id">{{ category.name }}</option>
             }
           </select>
+          @if (billSubcategories().length > 0) {
+            <label for="bill-subcategory">Subcategory (optional)</label>
+            <select
+              id="bill-subcategory"
+              #billSubcategory
+              [value]="billSubcategoryId() ?? ''"
+              (change)="selectBillSubcategory(billSubcategory.value)"
+            >
+              <option value="">No subcategory</option>
+              @for (subcategory of billSubcategories(); track subcategory.id) {
+                <option [value]="subcategory.id">{{ subcategory.name }}</option>
+              }
+            </select>
+          }
           <button type="submit" class="button">Add bill</button>
         </form>
 
