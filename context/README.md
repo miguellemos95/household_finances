@@ -40,7 +40,7 @@ Feature-level requirements are tracked in [Personal Expense Tracking](personal-e
 
 | Feature / use case | Status | Ticket |
 | --- | --- | --- |
-| [Personal expense tracking](personal-expense-tracking.md) | Issues #1-#4 registered; #1 and #2 completed and closed; #3 implementation in PR #8 for review; #4 implementation verified and merged in PR #10; issue remains open on GitHub pending closure | [#1](https://github.com/miguellemos95/household_finances/issues/1), [#2](https://github.com/miguellemos95/household_finances/issues/2), [#3](https://github.com/miguellemos95/household_finances/issues/3), [#4](https://github.com/miguellemos95/household_finances/issues/4) |
+| [Personal expense tracking](personal-expense-tracking.md) | Issues #1-#3 closed; #4 implementation and layout fix merged into `docs-run-project` in PRs #10 and #11; issue #4 remains open with gaps to address | [#1](https://github.com/miguellemos95/household_finances/issues/1), [#2](https://github.com/miguellemos95/household_finances/issues/2), [#3](https://github.com/miguellemos95/household_finances/issues/3), [#4](https://github.com/miguellemos95/household_finances/issues/4) |
 
 Each future feature/use-case document must capture:
 
