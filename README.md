@@ -10,9 +10,9 @@ Project requirements, decisions, and test evidence are documented in [Project Co
 - Python 3.12
 - Docker Compose for the local PostgreSQL service
 
-## Start PostgreSQL
+## Run locally (Windows PowerShell)
 
-From the repository root:
+Start Docker Desktop, then open a PowerShell terminal in the project root (the directory containing `compose.yaml`). Start PostgreSQL:
 
 ```powershell
 docker compose up -d db
@@ -20,22 +20,30 @@ docker compose up -d db
 
 The local database uses development-only credentials from `compose.yaml`. Do not reuse them outside local development. The configured port is published on all host interfaces, so network access depends on your firewall; this setup is not intended for production.
 
-## Start the API
+### Start the API
+
+Open a second PowerShell terminal in the project root. On the first run, create the virtual environment and install dependencies:
 
 ```powershell
 Set-Location backend
-Copy-Item .env.example .env
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+In the same terminal, apply migrations and start the API:
+
+```powershell
 .\.venv\Scripts\alembic.exe upgrade head
 .\.venv\Scripts\uvicorn.exe app.main:app --reload
 ```
 
-The API is available at `http://localhost:8000`. Interactive OpenAPI documentation is at `http://localhost:8000/docs`.
+On later runs, open a terminal in the project root and run `Set-Location backend` before the migration and API commands. The defaults connect to the local Compose database; to override them, copy `backend\.env.example` to `backend\.env` and adjust the settings.
 
-## Start the frontend
+The API is available at [http://localhost:8000](http://localhost:8000). Interactive API documentation is at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-In a second terminal from the repository root:
+### Start the frontend
+
+Open a third PowerShell terminal in the project root. On the first run, install dependencies, then start Angular:
 
 ```powershell
 Set-Location frontend
@@ -43,7 +51,28 @@ npm ci
 npm start
 ```
 
-Open `http://localhost:4200`. The page shows the monthly household ledger: a month selector, the combined income, household expenses and remaining balance, each partner's income, a form to add an expense, and that month's expenses. The footer reports whether the API liveness endpoint is reachable.
+On later runs, use `Set-Location frontend` and `npm start`; `npm ci` is only needed when dependencies need to be installed or restored.
+
+Open [http://localhost:4200](http://localhost:4200). The page shows the monthly household ledger, income and expense forms, and category budgets. The footer reports whether the API is reachable.
+
+Press **Ctrl+C** in the API and frontend terminals to stop them. To stop PostgreSQL, run `docker compose stop db` from the project root; its data remains in the Docker volume.
+
+### Optional: add sample budget data
+
+With the API running, use another PowerShell terminal to add example data for the current month:
+
+```powershell
+$api = 'http://localhost:8000'
+$month = Get-Date -Format 'yyyy-MM'
+$today = Get-Date -Format 'yyyy-MM-dd'
+
+Invoke-RestMethod -Method Put -Uri "$api/budgets/1?month=$month" -ContentType 'application/json' -Body '{"amount":"300.00"}'
+Invoke-RestMethod -Method Put -Uri "$api/budgets/2?month=$month" -ContentType 'application/json' -Body '{"amount":"150.00"}'
+Invoke-RestMethod -Method Post -Uri "$api/expenses" -ContentType 'application/json' -Body "{`"transaction_date`":`"$today`",`"amount`":`"245.00`",`"category_id`":1,`"subcategory_id`":1}"
+Invoke-RestMethod -Method Post -Uri "$api/expenses" -ContentType 'application/json' -Body "{`"transaction_date`":`"$today`",`"amount`":`"180.00`",`"category_id`":2,`"subcategory_id`":null}"
+```
+
+These commands use the default seeded category IDs and write to the local development database. They overwrite existing budgets for those categories and add expenses each time they are run. On a fresh database they show a warning for Bills and an over-budget state for Groceries; existing expenses affect the results.
 
 ## Tests
 
