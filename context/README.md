@@ -30,7 +30,9 @@ Feature-level requirements are tracked in [Personal Expense Tracking](personal-e
 4. Draft a ticket with a title and description for the user to register, unless the user explicitly asks the assistant to register it in GitHub. Include scope, acceptance criteria, relevant context, and intended verification.
 5. Before implementation, require an actual registered ticket ID. When the assistant creates an issue at the user's explicit request, record the returned issue ID against the feature/use case; a draft ticket is not implementation approval.
 6. Implement only the agreed ticket scope, including tests and the consolidated test and failover table.
-7. Execute the relevant tests and record actual results. Keep context, diagrams, decisions, and implementation aligned; raise scope changes with the user.
+7. Execute relevant feature and regression tests and record actual results and any failures or limitations. Keep context, diagrams, decisions, and implementation aligned; raise scope changes with the user.
+8. Once implementation, verification, and documentation are complete, open a pull request referencing the registered issue. If verification is blocked or fails, report it honestly rather than presenting the work as verified.
+9. The user reviews and approves the pull request. Do not merge without explicit user authorization. Keep evidence and communication concise and grounded in actual results to avoid unnecessary token use.
 
 ## Feature Index
 
