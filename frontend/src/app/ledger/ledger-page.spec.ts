@@ -41,6 +41,24 @@ function summary(overrides: Partial<MonthlySummary> = {}): MonthlySummary {
     total_income: '4053.50',
     total_expenses: '12.36',
     balance: '4041.14',
+    category_budgets: [
+      {
+        category: { id: 1, name: 'Bills' },
+        month: '2025-11',
+        limit: '100.00',
+        spent: '12.36',
+        percent: '12.36',
+        state: 'under',
+      },
+      {
+        category: { id: 2, name: 'Groceries' },
+        month: '2025-11',
+        limit: null,
+        spent: '0.00',
+        percent: '0.00',
+        state: 'unset',
+      },
+    ],
     ...overrides,
   };
 }
@@ -293,6 +311,63 @@ describe('LedgerPage', () => {
 
     http.expectNone(`${api}/incomes`);
     expect(page.textContent).toContain('Enter an amount greater than 0');
+  });
+
+  it('should set a monthly budget and show warning and exceeded states', () => {
+    flushLedger();
+
+    type('#budget-1', '100.00');
+    submitFormOf('#budget-1');
+    const request = http.expectOne(`${api}/budgets/1?month=2025-11`);
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({ amount: '100.00' });
+    request.flush({
+      category: { id: 1, name: 'Bills' },
+      month: '2025-11',
+      limit: '100.00',
+      spent: '80.00',
+      percent: '80.00',
+      state: 'warning',
+    });
+    flushLedger(
+      '2025-11',
+      summary({
+        category_budgets: [
+          {
+            category: { id: 1, name: 'Bills' },
+            month: '2025-11',
+            limit: '100.00',
+            spent: '80.00',
+            percent: '80.00',
+            state: 'warning',
+          },
+          {
+            category: { id: 2, name: 'Groceries' },
+            month: '2025-11',
+            limit: '50.00',
+            spent: '60.00',
+            percent: '120.00',
+            state: 'exceeded',
+          },
+        ],
+      }),
+    );
+
+    expect(page.textContent).toContain('Budget saved.');
+    expect(page.textContent).toContain('Warning');
+    expect(page.textContent).toContain('Over budget');
+    expect(page.textContent).toContain('80.00% used');
+    expect(page.textContent).toContain('120.00% used');
+  });
+
+  it('should not send an invalid budget amount', () => {
+    flushLedger();
+
+    type('#budget-1', '0');
+    submitFormOf('#budget-1');
+
+    http.expectNone(`${api}/budgets/1?month=2025-11`);
+    expect(page.textContent).toContain('Enter a budget amount greater than 0');
   });
 
   it('should rename a partner and refresh the month', () => {

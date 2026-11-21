@@ -75,9 +75,23 @@ class MemberIncome(BaseModel):
     amount: Decimal | None
 
 
+class BudgetSet(BaseModel):
+    amount: Amount
+
+
+class CategoryBudgetRead(ReadModel):
+    category: NamedReference
+    month: Month
+    limit: Decimal | None
+    spent: Decimal
+    percent: Decimal
+    state: str
+
+
 class MonthlySummary(BaseModel):
     month: Month
     incomes: list[MemberIncome]
     total_income: Decimal
     total_expenses: Decimal
     balance: Decimal
+    category_budgets: list[CategoryBudgetRead]

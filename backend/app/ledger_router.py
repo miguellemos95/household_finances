@@ -9,6 +9,8 @@ from app.database import get_session
 from app.months import Month
 from app.schemas import (
     MAX_ENTITY_ID,
+    BudgetSet,
+    CategoryBudgetRead,
     CategoryRead,
     ExpenseCreate,
     ExpenseRead,
@@ -76,3 +78,15 @@ def read_incomes(month: MonthQuery, session: SessionDependency):
 @router.get("/summary", response_model=MonthlySummary)
 def read_summary(month: MonthQuery, session: SessionDependency):
     return ledger_service.get_monthly_summary(session, month)
+
+
+@router.put("/budgets/{category_id}", response_model=CategoryBudgetRead)
+def set_budget(
+    category_id: Annotated[int, Path(ge=1, le=MAX_ENTITY_ID)],
+    month: MonthQuery,
+    change: BudgetSet,
+    session: SessionDependency,
+):
+    return ledger_service.set_category_budget(
+        session, category_id, month, change.amount
+    )

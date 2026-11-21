@@ -134,3 +134,112 @@ th {
   margin: 0;
   color: #587168;
 }
+
+.budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+
+.budget-card {
+  padding: 1rem;
+  border: 1px solid #d5ded6;
+  border-radius: 0.5rem;
+}
+
+.budget-card.budget-warning {
+  border-color: #d99b35;
+  background: #fffaf0;
+}
+
+.budget-card.budget-exceeded {
+  border-color: #b94b3e;
+  background: #fff5f3;
+}
+
+.budget-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.budget-heading h3 {
+  margin: 0;
+  color: #20352d;
+  font-size: 1rem;
+}
+
+.budget-state {
+  color: #587168;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.budget-warning .budget-state {
+  color: #95621b;
+}
+
+.budget-exceeded .budget-state {
+  color: #a13d30;
+}
+
+.budget-amount {
+  margin: 0.75rem 0;
+  color: #20352d;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-amount span {
+  color: #587168;
+  font-size: 0.85rem;
+}
+
+.budget-progress {
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: #e3e9e4;
+}
+
+.budget-progress span {
+  display: block;
+  height: 100%;
+  background: #557668;
+}
+
+.budget-warning .budget-progress span {
+  background: #d99b35;
+}
+
+.budget-exceeded .budget-progress span {
+  background: #b94b3e;
+}
+
+.budget-percent {
+  margin: 0.35rem 0 0.75rem;
+  color: #587168;
+  font-size: 0.75rem;
+}
+
+.budget-card form label {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #587168;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.budget-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.budget-form input {
+  min-width: 0;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #b9c6bc;
+  border-radius: 0.35rem;
+}

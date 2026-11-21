@@ -327,6 +327,14 @@ def test_summary_keeps_partner_incomes_separate_and_combines_totals(api: Api) ->
         "total_income": "6078.50",
         "total_expenses": "707.23",
         "balance": "5371.27",
+        "category_budgets": [
+            {"category": {"id": 1, "name": "Bills"}, "month": "2025-11", "limit": None, "spent": "30.33", "percent": "0.00", "state": "unset"},
+            {"category": {"id": 2, "name": "Groceries"}, "month": "2025-11", "limit": None, "spent": "52.89", "percent": "0.00", "state": "unset"},
+            {"category": {"id": 3, "name": "Beauty"}, "month": "2025-11", "limit": None, "spent": "2.99", "percent": "0.00", "state": "unset"},
+            {"category": {"id": 4, "name": "Transports"}, "month": "2025-11", "limit": None, "spent": "18.89", "percent": "0.00", "state": "unset"},
+            {"category": {"id": 5, "name": "Eat out"}, "month": "2025-11", "limit": None, "spent": "81.19", "percent": "0.00", "state": "unset"},
+            {"category": {"id": 6, "name": "Clothes"}, "month": "2025-11", "limit": None, "spent": "520.94", "percent": "0.00", "state": "unset"},
+        ],
     }
 
 
@@ -405,3 +413,134 @@ def test_reads_report_an_unavailable_database_without_details(path: str) -> None
     response = send(app, "GET", path)
 
     assert_sanitized_storage_failure(response)
+
+
+def set_budget(api: Api, category: str, month: str, amount: str) -> Response:
+    category_id = category_reference(api, category)["category_id"]
+    return api("PUT", f"/budgets/{category_id}", params={"month": month}, json={"amount": amount})
+
+
+def test_budget_write_allows_cross_origin_put(ledger_app: FastAPI) -> None:
+    response = send(
+        ledger_app,
+        "OPTIONS",
+        "/budgets/1?month=2025-11",
+        headers={
+            "Origin": "http://localhost:4200",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "PUT" in response.headers["access-control-allow-methods"]
+
+
+@pytest.mark.parametrize(
+    ("spent", "expected_state", "expected_percent"),
+    [
+        ("79.99", "under", "79.99"),
+        ("80.00", "warning", "80.00"),
+        ("100.00", "warning", "100.00"),
+        ("100.01", "exceeded", "100.01"),
+    ],
+)
+def test_category_budget_boundaries(
+    api: Api, spent: str, expected_state: str, expected_percent: str
+) -> None:
+    assert set_budget(api, "Groceries", "2025-11", "100.00").status_code == 200
+    assert record_expense(api, "2025-11-05", spent, "Groceries").status_code == 201
+
+    budget = next(
+        item
+        for item in read_month(api, "/summary", "2025-11")["category_budgets"]
+        if item["category"]["name"] == "Groceries"
+    )
+
+    assert budget["limit"] == "100.00"
+    assert budget["spent"] == spent
+    assert budget["percent"] == expected_percent
+    assert budget["state"] == expected_state
+
+
+def test_budget_does_not_warn_below_exact_threshold_when_display_rounds_to_80(
+    api: Api,
+) -> None:
+    assert set_budget(api, "Groceries", "2025-11", "200.01").status_code == 200
+    assert record_expense(api, "2025-11-05", "160.00", "Groceries").status_code == 201
+
+    budget = next(
+        item
+        for item in read_month(api, "/summary", "2025-11")["category_budgets"]
+        if item["category"]["name"] == "Groceries"
+    )
+
+    assert budget["percent"] == "80.00"
+    assert budget["state"] == "under"
+
+
+def test_budget_can_be_viewed_and_updated_for_each_month(api: Api) -> None:
+    assert set_budget(api, "Bills", "2025-11", "250.00").status_code == 200
+    assert set_budget(api, "Bills", "2025-11", "300.00").status_code == 200
+    assert set_budget(api, "Bills", "2025-12", "400.00").status_code == 200
+
+    november = next(
+        item
+        for item in read_month(api, "/summary", "2025-11")["category_budgets"]
+        if item["category"]["name"] == "Bills"
+    )
+    december = next(
+        item
+        for item in read_month(api, "/summary", "2025-12")["category_budgets"]
+        if item["category"]["name"] == "Bills"
+    )
+
+    assert november["limit"] == "300.00"
+    assert november["month"] == "2025-11"
+    assert december["limit"] == "400.00"
+    assert december["month"] == "2025-12"
+
+
+@pytest.mark.parametrize(
+    ("category_id", "month", "amount", "field"),
+    [
+        (9999, "2025-11", "100.00", "category_id"),
+        (1, "2025-13", "100.00", "month"),
+        (1, "2025-11", "0", "amount"),
+        (1, "2025-11", "-1.00", "amount"),
+        (1, "2025-11", "12.345", "amount"),
+    ],
+)
+def test_invalid_budget_is_rejected(
+    api: Api, category_id: int, month: str, amount: str, field: str
+) -> None:
+    response = api(
+        "PUT",
+        f"/budgets/{category_id}",
+        params={"month": month},
+        json={"amount": amount},
+    )
+
+    assert_invalid(response, field)
+
+
+def test_failed_budget_write_is_reported_and_not_stored(
+    api: Api, ledger_app: FastAPI
+) -> None:
+    category_id = category_reference(api, "Bills")["category_id"]
+
+    with failing_commits(ledger_app):
+        response = api(
+            "PUT",
+            f"/budgets/{category_id}",
+            params={"month": "2025-11"},
+            json={"amount": "250.00"},
+        )
+
+    assert_sanitized_storage_failure(response)
+    bills = next(
+        item
+        for item in read_month(api, "/summary", "2025-11")["category_budgets"]
+        if item["category"]["name"] == "Bills"
+    )
+    assert bills["limit"] is None

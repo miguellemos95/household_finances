@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, forkJoin, map, of, switchMap } from 'rxjs';
 import { describeApiError } from './api-error';
 import { ExpenseForm } from './expense-form';
-import { Category, Expense, LedgerApi, MonthlySummary } from './ledger-api';
+import { Category, CategoryBudget, Expense, LedgerApi, MonthlySummary } from './ledger-api';
 import { formatMonth, isMonth, shiftMonth, toMonth } from './month';
 import { PartnerIncome } from './partner-income';
 
@@ -32,6 +32,8 @@ export class LedgerPage implements OnInit {
     return ledger?.summary.month === this.month() ? ledger : null;
   });
   protected readonly loadError = signal<string | null>(null);
+  protected readonly budgetError = signal<string | null>(null);
+  protected readonly budgetSaved = signal(false);
 
   constructor() {
     this.loads
@@ -79,5 +81,36 @@ export class LedgerPage implements OnInit {
 
   protected isNegative(amount: string): boolean {
     return amount.startsWith('-');
+  }
+
+  protected setBudget(category: CategoryBudget, amountInput: HTMLInputElement): void {
+    const amount = amountInput.value.trim().replace(',', '.');
+    if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
+      this.budgetError.set('Enter a budget amount greater than 0.');
+      this.budgetSaved.set(false);
+      return;
+    }
+    this.api.setBudget(category.category.id, this.month(), amount).subscribe({
+      next: () => {
+        this.budgetError.set(null);
+        this.budgetSaved.set(true);
+        this.reload();
+      },
+      error: (error: unknown) => {
+        this.budgetError.set(describeApiError(error));
+        this.budgetSaved.set(false);
+      },
+    });
+  }
+
+  protected budgetLabel(budget: CategoryBudget): string {
+    if (budget.state === 'unset') return 'Not set';
+    if (budget.state === 'warning') return 'Warning';
+    if (budget.state === 'exceeded') return 'Over budget';
+    return 'Within budget';
+  }
+
+  protected budgetProgress(budget: CategoryBudget): number {
+    return Math.min(Number(budget.percent), 100);
   }
 }

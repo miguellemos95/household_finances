@@ -82,6 +82,56 @@
         <p class="empty">No expenses recorded for {{ monthLabel() }}.</p>
       }
     </section>
+
+    <section class="panel budget-panel" aria-labelledby="budgets-title">
+      <h2 id="budgets-title">Monthly budgets</h2>
+      @if (budgetSaved()) {
+        <p class="notice notice-success" role="status">Budget saved.</p>
+      }
+      @if (budgetError(); as error) {
+        <p class="notice notice-error" role="alert">The budget was not saved. {{ error }}</p>
+      }
+      <div class="budget-grid">
+        @for (budget of data.summary.category_budgets; track budget.category.id) {
+          <article
+            class="budget-card"
+            [class.budget-warning]="budget.state === 'warning'"
+            [class.budget-exceeded]="budget.state === 'exceeded'"
+          >
+            <div class="budget-heading">
+              <h3>{{ budget.category.name }}</h3>
+              <span class="budget-state">{{ budgetLabel(budget) }}</span>
+            </div>
+            <p class="budget-amount">
+              {{ budget.spent | currency: 'EUR' }}
+              @if (budget.limit) {
+                <span>of {{ budget.limit | currency: 'EUR' }}</span>
+              }
+            </p>
+            @if (budget.limit) {
+              <div class="budget-progress" aria-label="{{ budget.percent }} percent of budget">
+                <span [style.width.%]="budgetProgress(budget)"></span>
+              </div>
+              <p class="budget-percent">{{ budget.percent }}% used</p>
+            }
+            <form (submit)="setBudget(budget, budgetInput); $event.preventDefault()">
+              <label [for]="'budget-' + budget.category.id">Monthly limit</label>
+              <div class="budget-form">
+                <input
+                  [id]="'budget-' + budget.category.id"
+                  #budgetInput
+                  type="text"
+                  inputmode="decimal"
+                  [value]="budget.limit ?? ''"
+                  [attr.aria-label]="budget.category.name + ' monthly limit'"
+                />
+                <button type="submit" class="button">Save</button>
+              </div>
+            </form>
+          </article>
+        }
+      </div>
+    </section>
   } @else if (!loadError()) {
     <p class="empty" role="status">Loading the ledger…</p>
   }
