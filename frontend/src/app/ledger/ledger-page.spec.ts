@@ -69,6 +69,14 @@ describe('LedgerPage', () => {
   let page: HTMLElement;
 
   beforeEach(async () => {
+    if (!HTMLDialogElement.prototype.showModal) {
+      HTMLDialogElement.prototype.showModal = function () {
+        this.setAttribute('open', '');
+      };
+      HTMLDialogElement.prototype.close = function () {
+        this.removeAttribute('open');
+      };
+    }
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2025, 10, 15, 12));
     await TestBed.configureTestingModule({
@@ -138,12 +146,246 @@ describe('LedgerPage', () => {
     fixture.detectChanges();
   }
 
+  function clickDialogButton(titleId: string, label: string): void {
+    const dialog = element<HTMLElement>(`#${titleId}`).closest('dialog');
+    const button = Array.from(dialog?.querySelectorAll('button') ?? []).find(
+      (candidate) => candidate.textContent?.trim() === label,
+    );
+    if (!button) throw new Error(`No dialog button labelled ${label}`);
+    button.click();
+    fixture.detectChanges();
+  }
+
   function fillExpense(date: string, amount: string): void {
     type('#expense-date', date);
     type('#expense-amount', amount);
     choose('#expense-category', 1);
     choose('#expense-subcategory', 2);
   }
+
+  it('switches sections without losing drafts and starts dialogs closed', () => {
+    flushLedger();
+    const expenses = element<HTMLElement>('[aria-labelledby="expenses-title"]').parentElement!;
+    const bills = element<HTMLElement>('[aria-labelledby="bills-title"]').parentElement!;
+    expect(expenses.hidden).toBe(true);
+    expect(bills.hidden).toBe(true);
+    expect(element<HTMLElement>('#expense-dialog-title').closest('dialog')?.open).toBe(false);
+    expect(element<HTMLElement>('#bill-dialog-title').closest('dialog')?.open).toBe(false);
+
+    type('#partner-2-amount', '42.00');
+    clickButton('Bills');
+    clickButton('Expenses');
+    expect(expenses.hidden).toBe(false);
+    expect(bills.hidden).toBe(true);
+    expect(element<HTMLInputElement>('#partner-2-amount').value).toBe('42.00');
+    expect(element<HTMLButtonElement>('.tab[aria-pressed="true"]').textContent?.trim()).toBe(
+      'Expenses',
+    );
+  });
+
+  it('closes an edited expense on Escape without confirmation and resets the draft', () => {
+    flushLedger();
+    clickButton('Expenses');
+    clickButton('Add expense');
+    const dialog = element<HTMLElement>('#expense-dialog-title').closest('dialog')!;
+    expect(dialog.open).toBe(true);
+    type('#expense-amount', '12.00');
+    const confirm = vi.spyOn(window, 'confirm');
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    dialog.dispatchEvent(escape);
+    fixture.detectChanges();
+    expect(escape.defaultPrevented).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(dialog.open).toBe(false);
+    clickButton('Add expense');
+    expect(element<HTMLInputElement>('#expense-amount').value).toBe('');
+    confirm.mockRestore();
+  });
+
+  it.each([
+    ['Expenses', 'Add expense', '#expense-dialog-title', '#expense-amount'],
+    ['Bills', 'Add bill', '#bill-dialog-title', '#bill-amount'],
+  ])(
+    'requests a leave-page warning only while %s dialog has edits',
+    (section, button, title, input) => {
+      flushLedger();
+      clickButton(section);
+      clickButton(button);
+      let event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+
+      type(input, '12.00');
+      event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+
+      type(input, '');
+      event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      type(input, '12.00');
+      clickDialogButton(title.slice(1), 'Close');
+      expect(element<HTMLElement>(title).closest('dialog')?.open).toBe(false);
+      expect(element<HTMLInputElement>(input).value).toBe('');
+      event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    },
+  );
+
+  it('does not request a leave-page warning for edits outside dialogs', () => {
+    flushLedger();
+    type('#partner-2-amount', '100.00');
+    type('#budget-1', '120.00');
+    clickButton('Expenses');
+    clickButton('Add expense');
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('keeps expense errors in the dialog and closes with a fresh form after saving', () => {
+    flushLedger();
+    clickButton('Expenses');
+    clickButton('Add expense');
+    const dialog = element<HTMLElement>('#expense-dialog-title').closest('dialog')!;
+    fillExpense('2025-11-10', '12.36');
+    submitFormOf('#expense-amount');
+    http
+      .expectOne(`${api}/expenses`)
+      .flush(DATABASE_UNAVAILABLE, { status: 503, statusText: 'Service Unavailable' });
+    fixture.detectChanges();
+    expect(dialog.open).toBe(true);
+    expect(dialog.textContent).toContain('Database is unavailable.');
+    expect(element<HTMLInputElement>('#expense-amount').value).toBe('12.36');
+    submitFormOf('#expense-amount');
+    http.expectOne(`${api}/expenses`).flush({ ...INTERNET, id: 8 });
+    flushLedger();
+    expect(dialog.open).toBe(false);
+    expect(element<HTMLElement>('[aria-labelledby="expenses-title"]').textContent).toContain(
+      'Expense recorded.',
+    );
+    clickButton('Add expense');
+    expect(element<HTMLInputElement>('#expense-amount').value).toBe('');
+    expect(element<HTMLSelectElement>('#expense-category').selectedIndex).toBe(0);
+  });
+
+  it('saves a bill and resets it after success', () => {
+    flushLedger();
+    clickButton('Bills');
+    clickButton('Add bill');
+    const dialog = element<HTMLElement>('#bill-dialog-title').closest('dialog')!;
+    type('#bill-due-date', '2025-11-20');
+    type('#bill-amount', '45.00');
+    choose('#bill-category', 1);
+    submitFormOf('#bill-amount');
+    http.expectOne(`${api}/bills`).flush({ id: 1 });
+    flushLedger();
+    expect(dialog.open).toBe(false);
+    clickButton('Add bill');
+    expect(element<HTMLInputElement>('#bill-amount').value).toBe('');
+    expect(element<HTMLSelectElement>('#bill-category').value).toBe('0');
+  });
+
+  it.each([
+    ['expense', () => type('#expense-amount', '12.00')],
+    ['income', () => type('#partner-2-amount', '100.00')],
+    [
+      'name',
+      () => {
+        clickButton('Rename');
+        type('#partner-1-name', 'New name');
+      },
+    ],
+    ['bill', () => type('#bill-amount', '20.00')],
+    ['bill due date', () => type('#bill-due-date', '2025-11-25')],
+    ['bill recurrence', () => choose('#bill-recurrence', 1)],
+    ['bill category', () => choose('#bill-category', 1)],
+    ['budget', () => type('#budget-1', '120.00')],
+  ])('warns before discarding an unsaved %s edit and honors cancel', (_name, edit) => {
+    flushLedger();
+    edit();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    clickButton('Next');
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(page.textContent).toContain('November 2025');
+    http.expectNone(`${api}/summary?month=2025-12`);
+    confirm.mockRestore();
+  });
+
+  it('restores the month selector on cancel and discards drafts on confirmation', () => {
+    flushLedger();
+    clickButton('Expenses');
+    type('#expense-amount', '12.00');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const input = element<HTMLInputElement>('#ledger-month');
+    input.value = '2025-12';
+    input.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(input.value).toBe('2025-11');
+    expect(element<HTMLInputElement>('#expense-amount').value).toBe('12.00');
+
+    confirm.mockReturnValue(true);
+    clickButton('Next');
+    flushLedger('2025-12', summary({ month: '2025-12' }), []);
+    expect(element<HTMLInputElement>('#expense-amount').value).toBe('');
+    expect(element<HTMLButtonElement>('.tab[aria-pressed="true"]').textContent?.trim()).toBe(
+      'Expenses',
+    );
+    confirm.mockRestore();
+  });
+
+  it('does not warn when a budget amount is unchanged apart from formatting', () => {
+    flushLedger();
+    type('#budget-1', '100,0');
+    const confirm = vi.spyOn(window, 'confirm');
+    clickButton('Next');
+    expect(confirm).not.toHaveBeenCalled();
+    flushLedger('2025-12', summary({ month: '2025-12' }), []);
+    confirm.mockRestore();
+  });
+
+  it('restores the selected month when the month input is cleared', () => {
+    flushLedger();
+    const input = element<HTMLInputElement>('#ledger-month');
+    input.value = '';
+    input.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(input.value).toBe('2025-11');
+    http.expectNone(`${api}/summary?month=`);
+  });
+
+  it.each(['amount', 'date'])('warns about unsaved bill payment %s edits', (field) => {
+    const bill: BillOccurrence = {
+      id: 9,
+      bill: {
+        id: 2,
+        recurrence: 'one_off',
+        first_due_date: '2025-11-20',
+        due_day: null,
+        default_amount: '45.00',
+        category: { id: 1, name: 'Bills' },
+        subcategory: null,
+      },
+      due_date: '2025-11-20',
+      amount: '45.00',
+      status: 'pending',
+      paid_amount: null,
+      paid_date: null,
+    };
+    flushLedger('2025-11', summary(), [INTERNET], [bill]);
+    type(
+      field === 'amount' ? '#bill-occurrence-9' : '[aria-label="Paid date for bill 9"]',
+      field === 'amount' ? '50.00' : '2025-11-14',
+    );
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    clickButton('Next');
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(page.textContent).toContain('November 2025');
+    confirm.mockRestore();
+  });
 
   it('should show the current month summary, partner incomes and expenses', () => {
     flushLedger('2025-11', summary({ total_income: '6078.50', balance: '6066.14' }));
@@ -216,6 +458,18 @@ describe('LedgerPage', () => {
 
     expect(page.textContent).toContain('Expense recorded.');
     expect(page.textContent).toContain('€24.72');
+    expect(element<HTMLInputElement>('#expense-amount').value).toBe('');
+  });
+
+  it('disables expense entry while its save is in flight', () => {
+    flushLedger();
+    fillExpense('2025-11-10', '12.36');
+    submitFormOf('#expense-amount');
+    const request = http.expectOne(`${api}/expenses`);
+    fixture.detectChanges();
+    expect(element<HTMLFieldSetElement>('app-expense-form fieldset').disabled).toBe(true);
+    request.flush({ ...INTERNET, id: 8, transaction_date: '2025-11-10' });
+    flushLedger();
     expect(element<HTMLInputElement>('#expense-amount').value).toBe('');
   });
 
@@ -373,6 +627,22 @@ describe('LedgerPage', () => {
     expect(page.textContent).toContain('Enter a budget amount greater than 0');
   });
 
+  it('keeps a failed budget edit and its error visible in Budgets', () => {
+    flushLedger();
+    clickButton('Budgets');
+    type('#budget-1', '120.00');
+    submitFormOf('#budget-1');
+    http
+      .expectOne(`${api}/budgets/1?month=2025-11`)
+      .flush(DATABASE_UNAVAILABLE, { status: 503, statusText: 'Service Unavailable' });
+    fixture.detectChanges();
+    expect(element<HTMLElement>('.budget-panel').hidden).toBe(false);
+    expect(element<HTMLElement>('.budget-panel [role="alert"]').textContent).toContain(
+      'Database is unavailable.',
+    );
+    expect(element<HTMLInputElement>('#budget-1').value).toBe('120.00');
+  });
+
   it('should create a bill and refresh the ledger', () => {
     flushLedger();
 
@@ -404,6 +674,31 @@ describe('LedgerPage', () => {
     flushLedger();
 
     expect(page.textContent).toContain('Bill saved or marked paid.');
+    const confirm = vi.spyOn(window, 'confirm');
+    clickButton('Next');
+    expect(confirm).not.toHaveBeenCalled();
+    flushLedger('2025-12', summary({ month: '2025-12' }), []);
+    confirm.mockRestore();
+  });
+
+  it('keeps a failed bill edit and its error visible in Bills', () => {
+    flushLedger();
+    clickButton('Bills');
+    clickButton('Add bill');
+    type('#bill-due-date', '2025-11-20');
+    type('#bill-amount', '45.00');
+    choose('#bill-category', 1);
+    submitFormOf('#bill-amount');
+    http
+      .expectOne(`${api}/bills`)
+      .flush(DATABASE_UNAVAILABLE, { status: 503, statusText: 'Service Unavailable' });
+    fixture.detectChanges();
+    expect(element<HTMLElement>('.bill-panel').parentElement?.hidden).toBe(false);
+    expect(element<HTMLElement>('#bill-dialog-title').closest('dialog')?.open).toBe(true);
+    expect(element<HTMLElement>('.bill-panel [role="alert"]').textContent).toContain(
+      'Database is unavailable.',
+    );
+    expect(element<HTMLInputElement>('#bill-amount').value).toBe('45.00');
   });
 
   it('should send a selected bill subcategory and clear it when category changes', () => {
@@ -422,6 +717,20 @@ describe('LedgerPage', () => {
     expect(request.request.body.subcategory_id).toBe(4);
     request.flush({ id: 1 });
     flushLedger();
+  });
+
+  it('clears a bill subcategory when the dialog is closed', () => {
+    flushLedger();
+    clickButton('Bills');
+    clickButton('Add bill');
+    type('#bill-due-date', '2025-11-20');
+    type('#bill-amount', '45.00');
+    choose('#bill-category', 1);
+    choose('#bill-subcategory', 1);
+    clickDialogButton('bill-dialog-title', 'Close');
+    expect(element<HTMLElement>('#bill-dialog-title').closest('dialog')!.open).toBe(false);
+    expect(element<HTMLInputElement>('#bill-amount').value).toBe('');
+    expect(page.querySelector('#bill-subcategory')).toBeNull();
   });
 
   it('should mark a pending bill paid and refresh totals', () => {
