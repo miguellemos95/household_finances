@@ -420,6 +420,22 @@ def set_budget(api: Api, category: str, month: str, amount: str) -> Response:
     return api("PUT", f"/budgets/{category_id}", params={"month": month}, json={"amount": amount})
 
 
+def test_budget_write_allows_cross_origin_put(ledger_app: FastAPI) -> None:
+    response = send(
+        ledger_app,
+        "OPTIONS",
+        "/budgets/1?month=2025-11",
+        headers={
+            "Origin": "http://localhost:4200",
+            "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "PUT" in response.headers["access-control-allow-methods"]
+
+
 @pytest.mark.parametrize(
     ("spent", "expected_state", "expected_percent"),
     [

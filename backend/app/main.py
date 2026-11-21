@@ -16,7 +16,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.frontend_origin],
-        allow_methods=["GET", "POST", "PATCH"],
+        allow_methods=["GET", "POST", "PATCH", "PUT"],
         allow_headers=["*"],
     )
     register_error_handlers(app)
