@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Numeric, String, UniqueConstraint, false, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 NAME_LENGTH = 50
@@ -22,11 +22,21 @@ class Member(Base):
 
 class Category(Base):
     __tablename__ = "categories"
-    __table_args__ = (UniqueConstraint("name", name="uq_categories_name"),)
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_categories_name"),
+        Index(
+            "uq_categories_one_bill_category",
+            "is_bill_category",
+            unique=True,
+            postgresql_where=text("is_bill_category"),
+            sqlite_where=text("is_bill_category"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(NAME_LENGTH))
     position: Mapped[int]
+    is_bill_category: Mapped[bool] = mapped_column(server_default=false())
     subcategories: Mapped[list["Subcategory"]] = relationship(order_by="Subcategory.position")
 
 

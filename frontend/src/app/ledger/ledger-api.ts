@@ -9,6 +9,7 @@ export interface NamedReference {
 }
 
 export interface Category extends NamedReference {
+  is_bill_category: boolean;
   subcategories: NamedReference[];
 }
 
@@ -82,7 +83,7 @@ export interface NewBill {
   due_date: string;
   amount: string;
   category_id: number;
-  subcategory_id: number | null;
+  subcategory_id: number;
 }
 
 @Injectable({ providedIn: 'root' })

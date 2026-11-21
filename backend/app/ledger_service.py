@@ -56,6 +56,22 @@ def rename_member(session: Session, member_id: int, name: str) -> Member:
     return member
 
 
+def _validate_subcategory(
+    session: Session, category: Category, subcategory_id: int | None
+) -> Subcategory | None:
+    if subcategory_id is None:
+        if category.subcategories:
+            raise InvalidEntryError("Subcategory is required.", field="subcategory_id")
+        return None
+    subcategory = session.get(Subcategory, subcategory_id)
+    if subcategory is None or subcategory.category_id != category.id:
+        raise InvalidEntryError(
+            "Subcategory does not belong to the category.",
+            field="subcategory_id",
+        )
+    return subcategory
+
+
 def record_expense(session: Session, entry: ExpenseCreate, today: date) -> Expense:
     if entry.transaction_date > today:
         raise InvalidEntryError(
@@ -65,14 +81,9 @@ def record_expense(session: Session, entry: ExpenseCreate, today: date) -> Expen
     category = session.get(Category, entry.category_id)
     if category is None:
         raise InvalidEntryError("Category does not exist.", field="category_id")
-    subcategory = None
-    if entry.subcategory_id is not None:
-        subcategory = session.get(Subcategory, entry.subcategory_id)
-        if subcategory is None or subcategory.category_id != category.id:
-            raise InvalidEntryError(
-                "Subcategory does not belong to the category.",
-                field="subcategory_id",
-            )
+    if category.is_bill_category:
+        raise InvalidEntryError("Bills cannot be recorded as manual expenses.", field="category_id")
+    subcategory = _validate_subcategory(session, category, entry.subcategory_id)
 
     expense = Expense(
         transaction_date=entry.transaction_date,
@@ -88,8 +99,9 @@ def record_expense(session: Session, entry: ExpenseCreate, today: date) -> Expen
 def list_expenses(session: Session, month: date) -> Sequence[Expense]:
     statement = (
         select(Expense)
+        .join(Expense.category)
         .options(joinedload(Expense.category), joinedload(Expense.subcategory))
-        .where(_in_month(month))
+        .where(_in_month(month), Category.is_bill_category.is_(False))
         .order_by(Expense.transaction_date.desc(), Expense.id.desc())
     )
     return session.scalars(statement).all()
@@ -230,14 +242,11 @@ def create_bill(
     category = session.get(Category, entry.category_id)
     if category is None:
         raise InvalidEntryError("Category does not exist.", field="category_id")
-    subcategory = None
-    if entry.subcategory_id is not None:
-        subcategory = session.get(Subcategory, entry.subcategory_id)
-        if subcategory is None or subcategory.category_id != category.id:
-            raise InvalidEntryError(
-                "Subcategory does not belong to the category.",
-                field="subcategory_id",
-            )
+    if not category.is_bill_category:
+        raise InvalidEntryError("Choose the bill category.", field="category_id")
+    subcategory = _validate_subcategory(session, category, entry.subcategory_id)
+    if subcategory is None:
+        raise InvalidEntryError("Choose a valid bill subcategory.", field="subcategory_id")
 
     due_day = entry.due_date.day if entry.recurrence == "monthly" else None
     bill = Bill(

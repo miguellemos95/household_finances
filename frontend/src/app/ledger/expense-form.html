@@ -28,10 +28,10 @@
       <select
         id="expense-category"
         formControlName="categoryId"
-        (change)="form.controls.subcategoryId.reset()"
+        (change)="selectCategory()"
       >
         <option [ngValue]="null">Choose a category</option>
-        @for (category of categories(); track category.id) {
+        @for (category of expenseCategories(); track category.id) {
           <option [ngValue]="category.id">{{ category.name }}</option>
         }
       </select>
@@ -42,13 +42,16 @@
 
     @if (subcategories().length > 0) {
       <div class="field">
-        <label for="expense-subcategory">Subcategory (optional)</label>
+        <label for="expense-subcategory">Subcategory</label>
         <select id="expense-subcategory" formControlName="subcategoryId">
-          <option [ngValue]="null">No subcategory</option>
+          <option [ngValue]="null">Choose a subcategory</option>
           @for (subcategory of subcategories(); track subcategory.id) {
             <option [ngValue]="subcategory.id">{{ subcategory.name }}</option>
           }
         </select>
+        @if (showError(form.controls.subcategoryId)) {
+          <p class="field-error">Choose a subcategory.</p>
+        }
       </div>
     }
 

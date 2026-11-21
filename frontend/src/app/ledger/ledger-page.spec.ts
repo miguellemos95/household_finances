@@ -11,20 +11,25 @@ const CATEGORIES: Category[] = [
   {
     id: 1,
     name: 'Bills',
+    is_bill_category: true,
     subcategories: [
+      { id: 1, name: 'Water' },
+      { id: 2, name: 'Electricity' },
       { id: 3, name: 'Heating' },
       { id: 4, name: 'Home Internet' },
+      { id: 5, name: 'Phone Plan' },
     ],
   },
-  { id: 2, name: 'Groceries', subcategories: [] },
+  { id: 2, name: 'Groceries', is_bill_category: false, subcategories: [] },
+  { id: 3, name: 'Beauty', is_bill_category: false, subcategories: [{ id: 6, name: 'Hair' }] },
 ];
 
-const INTERNET: Expense = {
+const BEAUTY_EXPENSE: Expense = {
   id: 7,
   transaction_date: '2025-11-03',
   amount: '12.36',
-  category: { id: 1, name: 'Bills' },
-  subcategory: { id: 4, name: 'Home Internet' },
+  category: { id: 3, name: 'Beauty' },
+  subcategory: { id: 6, name: 'Hair' },
 };
 
 const DATABASE_UNAVAILABLE = {
@@ -97,10 +102,11 @@ describe('LedgerPage', () => {
   function flushLedger(
     month = '2025-11',
     monthSummary = summary({ month }),
-    expenses: Expense[] = [INTERNET],
+    expenses: Expense[] = [BEAUTY_EXPENSE],
     bills: BillOccurrence[] = [],
+    categories: Category[] = CATEGORIES,
   ): void {
-    http.expectOne(`${api}/categories`).flush(CATEGORIES);
+    http.expectOne(`${api}/categories`).flush(categories);
     http.expectOne(`${api}/summary?month=${month}`).flush(monthSummary);
     http.expectOne(`${api}/expenses?month=${month}`).flush(expenses);
     http.expectOne(`${api}/bills?month=${month}`).flush(bills);
@@ -159,8 +165,8 @@ describe('LedgerPage', () => {
   function fillExpense(date: string, amount: string): void {
     type('#expense-date', date);
     type('#expense-amount', amount);
-    choose('#expense-category', 1);
-    choose('#expense-subcategory', 2);
+    choose('#expense-category', 2);
+    choose('#expense-subcategory', 1);
   }
 
   it('switches sections without losing drafts and starts dialogs closed', () => {
@@ -260,7 +266,7 @@ describe('LedgerPage', () => {
     expect(dialog.textContent).toContain('Database is unavailable.');
     expect(element<HTMLInputElement>('#expense-amount').value).toBe('12.36');
     submitFormOf('#expense-amount');
-    http.expectOne(`${api}/expenses`).flush({ ...INTERNET, id: 8 });
+    http.expectOne(`${api}/expenses`).flush({ ...BEAUTY_EXPENSE, id: 8 });
     flushLedger();
     expect(dialog.open).toBe(false);
     expect(element<HTMLElement>('[aria-labelledby="expenses-title"]').textContent).toContain(
@@ -278,14 +284,14 @@ describe('LedgerPage', () => {
     const dialog = element<HTMLElement>('#bill-dialog-title').closest('dialog')!;
     type('#bill-due-date', '2025-11-20');
     type('#bill-amount', '45.00');
-    choose('#bill-category', 1);
+    choose('#bill-subcategory', 1);
     submitFormOf('#bill-amount');
     http.expectOne(`${api}/bills`).flush({ id: 1 });
     flushLedger();
     expect(dialog.open).toBe(false);
     clickButton('Add bill');
     expect(element<HTMLInputElement>('#bill-amount').value).toBe('');
-    expect(element<HTMLSelectElement>('#bill-category').value).toBe('0');
+    expect(element<HTMLSelectElement>('#bill-subcategory').value).toBe('');
   });
 
   it.each([
@@ -301,7 +307,7 @@ describe('LedgerPage', () => {
     ['bill', () => type('#bill-amount', '20.00')],
     ['bill due date', () => type('#bill-due-date', '2025-11-25')],
     ['bill recurrence', () => choose('#bill-recurrence', 1)],
-    ['bill category', () => choose('#bill-category', 1)],
+    ['bill category', () => choose('#bill-subcategory', 1)],
     ['budget', () => type('#budget-1', '120.00')],
   ])('warns before discarding an unsaved %s edit and honors cancel', (_name, edit) => {
     flushLedger();
@@ -375,7 +381,7 @@ describe('LedgerPage', () => {
       paid_amount: null,
       paid_date: null,
     };
-    flushLedger('2025-11', summary(), [INTERNET], [bill]);
+    flushLedger('2025-11', summary(), [BEAUTY_EXPENSE], [bill]);
     type(
       field === 'amount' ? '#bill-occurrence-9' : '[aria-label="Paid date for bill 9"]',
       field === 'amount' ? '50.00' : '2025-11-14',
@@ -398,7 +404,7 @@ describe('LedgerPage', () => {
     expect(text).toContain('Azul');
     expect(text).toContain('€4,053.50');
     expect(text).toContain('Pinketa');
-    expect(text).toContain('Home Internet');
+    expect(text).toContain('Hair');
     expect(text).toContain('3 Nov 2025');
   });
 
@@ -450,10 +456,10 @@ describe('LedgerPage', () => {
     expect(request.request.body).toEqual({
       transaction_date: '2025-11-10',
       amount: '12.36',
-      category_id: 1,
-      subcategory_id: 4,
+      category_id: 3,
+      subcategory_id: 6,
     });
-    request.flush({ ...INTERNET, id: 8, transaction_date: '2025-11-10' });
+    request.flush({ ...BEAUTY_EXPENSE, id: 8, transaction_date: '2025-11-10' });
     flushLedger('2025-11', summary({ total_expenses: '24.72', balance: '4028.78' }));
 
     expect(page.textContent).toContain('Expense recorded.');
@@ -468,7 +474,7 @@ describe('LedgerPage', () => {
     const request = http.expectOne(`${api}/expenses`);
     fixture.detectChanges();
     expect(element<HTMLFieldSetElement>('app-expense-form fieldset').disabled).toBe(true);
-    request.flush({ ...INTERNET, id: 8, transaction_date: '2025-11-10' });
+    request.flush({ ...BEAUTY_EXPENSE, id: 8, transaction_date: '2025-11-10' });
     flushLedger();
     expect(element<HTMLInputElement>('#expense-amount').value).toBe('');
   });
@@ -480,7 +486,7 @@ describe('LedgerPage', () => {
     submitFormOf('#expense-amount');
     http
       .expectOne(`${api}/expenses`)
-      .flush({ ...INTERNET, id: 9, transaction_date: '2025-10-31', amount: '5.00' });
+      .flush({ ...BEAUTY_EXPENSE, id: 9, transaction_date: '2025-10-31', amount: '5.00' });
     flushLedger('2025-10');
 
     expect(page.textContent).toContain('October 2025');
@@ -495,6 +501,45 @@ describe('LedgerPage', () => {
     http.expectNone(`${api}/expenses`);
     expect(page.textContent).toContain('Enter an amount greater than 0');
     expect(page.textContent).toContain('Choose a category.');
+  });
+
+  it('excludes Bills and requires a subcategory only when available', () => {
+    flushLedger();
+    const categories = element<HTMLSelectElement>('#expense-category');
+    expect(Array.from(categories.options, (option) => option.textContent?.trim())).toEqual([
+      'Choose a category',
+      'Groceries',
+      'Beauty',
+    ]);
+    type('#expense-amount', '12.00');
+    choose('#expense-category', 2);
+    submitFormOf('#expense-amount');
+    http.expectNone(`${api}/expenses`);
+    expect(page.textContent).toContain('Choose a subcategory.');
+
+    choose('#expense-subcategory', 1);
+    choose('#expense-category', 1);
+    expect(page.querySelector('#expense-subcategory')).toBeNull();
+    submitFormOf('#expense-amount');
+    const request = http.expectOne(`${api}/expenses`);
+    expect(request.request.body.category_id).toBe(2);
+    expect(request.request.body.subcategory_id).toBeNull();
+    request.flush({ ...BEAUTY_EXPENSE, category: { id: 2, name: 'Groceries' }, subcategory: null });
+    flushLedger();
+  });
+
+  it('uses the category flag rather than its name for expense choices', () => {
+    const categories = CATEGORIES.map((category) => ({
+      ...category,
+      name: category.id === 1 ? 'Utilities' : category.id === 2 ? 'Bills' : category.name,
+    }));
+    flushLedger('2025-11', summary(), [], [], categories);
+    const options = Array.from(
+      element<HTMLSelectElement>('#expense-category').options,
+      (option) => option.textContent?.trim(),
+    );
+    expect(options).toContain('Bills');
+    expect(options).not.toContain('Utilities');
   });
 
   it('should report a failed expense write without confirming or refreshing', () => {
@@ -649,7 +694,7 @@ describe('LedgerPage', () => {
     choose('#bill-recurrence', 1);
     type('#bill-due-date', '2025-12-20');
     type('#bill-amount', '45.00');
-    choose('#bill-category', 1);
+    choose('#bill-subcategory', 1);
     submitFormOf('#bill-amount');
 
     const request = http.expectOne(`${api}/bills`);
@@ -659,7 +704,7 @@ describe('LedgerPage', () => {
       due_date: '2025-12-20',
       amount: '45.00',
       category_id: 1,
-      subcategory_id: null,
+      subcategory_id: 1,
     });
 
     request.flush({
@@ -669,7 +714,7 @@ describe('LedgerPage', () => {
       due_day: 20,
       default_amount: '45.00',
       category: { id: 1, name: 'Bills' },
-      subcategory: null,
+      subcategory: { id: 1, name: 'Water' },
     });
     flushLedger();
 
@@ -687,7 +732,7 @@ describe('LedgerPage', () => {
     clickButton('Add bill');
     type('#bill-due-date', '2025-11-20');
     type('#bill-amount', '45.00');
-    choose('#bill-category', 1);
+    choose('#bill-subcategory', 1);
     submitFormOf('#bill-amount');
     http
       .expectOne(`${api}/bills`)
@@ -701,20 +746,27 @@ describe('LedgerPage', () => {
     expect(element<HTMLInputElement>('#bill-amount').value).toBe('45.00');
   });
 
-  it('should send a selected bill subcategory and clear it when category changes', () => {
-    flushLedger();
+  it('offers stored subcategories of the flagged category and refuses a missing selection', () => {
+    const categories = CATEGORIES.map((category) =>
+      category.is_bill_category
+        ? { ...category, name: 'Utilities', subcategories: [...category.subcategories, { id: 99, name: 'Other' }] }
+        : category,
+    );
+    flushLedger('2025-11', summary(), [], [], categories);
     type('#bill-due-date', '2025-11-20');
     type('#bill-amount', '45.00');
-    choose('#bill-category', 1);
-    choose('#bill-subcategory', 2);
-    choose('#bill-category', 2);
-    expect(page.querySelector('#bill-subcategory')).toBeNull();
-    choose('#bill-category', 1);
-    expect(element<HTMLSelectElement>('#bill-subcategory').value).toBe('');
-    choose('#bill-subcategory', 2);
+    const select = element<HTMLSelectElement>('#bill-subcategory');
+    expect(Array.from(select.options, (option) => option.textContent?.trim())).toEqual([
+      'Choose a bill category', 'Water', 'Electricity', 'Heating', 'Home Internet', 'Phone Plan', 'Other',
+    ]);
+    submitFormOf('#bill-amount');
+    http.expectNone(`${api}/bills`);
+    expect(page.textContent).toContain('a bill category.');
+    choose('#bill-subcategory', 6);
     submitFormOf('#bill-amount');
     const request = http.expectOne(`${api}/bills`);
-    expect(request.request.body.subcategory_id).toBe(4);
+    expect(request.request.body.category_id).toBe(1);
+    expect(request.request.body.subcategory_id).toBe(99);
     request.flush({ id: 1 });
     flushLedger();
   });
@@ -725,12 +777,22 @@ describe('LedgerPage', () => {
     clickButton('Add bill');
     type('#bill-due-date', '2025-11-20');
     type('#bill-amount', '45.00');
-    choose('#bill-category', 1);
     choose('#bill-subcategory', 1);
     clickDialogButton('bill-dialog-title', 'Close');
     expect(element<HTMLElement>('#bill-dialog-title').closest('dialog')!.open).toBe(false);
     expect(element<HTMLInputElement>('#bill-amount').value).toBe('');
-    expect(page.querySelector('#bill-subcategory')).toBeNull();
+    expect(element<HTMLSelectElement>('#bill-subcategory').value).toBe('');
+  });
+
+  it('reports unavailable bill categories instead of submitting', () => {
+    flushLedger('2025-11', summary(), [], [], CATEGORIES.filter((category) => category.id !== 1));
+    clickButton('Bills');
+    clickButton('Add bill');
+    expect(page.textContent).toContain('Bill categories are unavailable.');
+    type('#bill-due-date', '2025-11-20');
+    type('#bill-amount', '45.00');
+    submitFormOf('#bill-amount');
+    http.expectNone(`${api}/bills`);
   });
 
   it('should mark a pending bill paid and refresh totals', () => {
@@ -751,7 +813,7 @@ describe('LedgerPage', () => {
       paid_amount: null,
       paid_date: null,
     };
-    flushLedger('2025-11', summary(), [INTERNET], [bill]);
+    flushLedger('2025-11', summary(), [BEAUTY_EXPENSE], [bill]);
 
     clickButton('Mark paid');
     const request = http.expectOne(`${api}/bills/occurrences/9/pay`);
@@ -788,7 +850,7 @@ describe('LedgerPage', () => {
       paid_amount: null,
       paid_date: null,
     };
-    flushLedger('2025-11', summary(), [INTERNET], [bill]);
+    flushLedger('2025-11', summary(), [BEAUTY_EXPENSE], [bill]);
     clickButton('Mark paid');
     http
       .expectOne(`${api}/bills/occurrences/9/pay`)

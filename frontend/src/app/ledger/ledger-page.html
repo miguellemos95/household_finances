@@ -102,7 +102,7 @@
             #billCreateForm
             class="bill-create"
             (submit)="
-              recordBill(billRecurrence, billDueDate, billAmount, billCategory);
+              recordBill(billRecurrence, billDueDate, billAmount, billSubcategory);
               $event.preventDefault()
             "
           >
@@ -116,31 +116,17 @@
               <input id="bill-due-date" type="date" #billDueDate />
               <label for="bill-amount">Amount (EUR)</label>
               <input id="bill-amount" type="text" inputmode="decimal" #billAmount />
-              <label for="bill-category">Category</label>
-              <select
-                id="bill-category"
-                #billCategory
-                [value]="billCategoryId() ?? 0"
-                (change)="selectBillCategory(billCategory.value)"
-              >
-                <option value="0">Choose a category</option>
-                @for (category of data.categories; track category.id) {
-                  <option [value]="category.id">{{ category.name }}</option>
+              <label for="bill-subcategory">Bill category</label>
+              <select id="bill-subcategory" #billSubcategory>
+                <option value="">Choose a bill category</option>
+                @for (subcategory of billSubcategories(); track subcategory.id) {
+                  <option [value]="subcategory.id">{{ subcategory.name }}</option>
                 }
               </select>
-              @if (billSubcategories().length > 0) {
-                <label for="bill-subcategory">Subcategory (optional)</label>
-                <select
-                  id="bill-subcategory"
-                  #billSubcategory
-                  [value]="billSubcategoryId() ?? ''"
-                  (change)="selectBillSubcategory(billSubcategory.value)"
-                >
-                  <option value="">No subcategory</option>
-                  @for (subcategory of billSubcategories(); track subcategory.id) {
-                    <option [value]="subcategory.id">{{ subcategory.name }}</option>
-                  }
-                </select>
+              @if (billSubcategories().length === 0) {
+                <p class="notice notice-error" role="alert">
+                  Bill categories are unavailable. Reload the ledger and try again.
+                </p>
               }
               <button type="submit" class="button">Add bill</button>
             </fieldset>

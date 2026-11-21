@@ -30,9 +30,9 @@ Source: `Pingvinukas_Coins.xlsx` in the parent workspace directory (outside this
 | FEAT-001 | Functional | Record household expenses by actual date, in EUR. An expense cannot be dated after the current day. |
 | FEAT-002 | Functional | Count expenses together as household expenses; do not attribute an expense to one partner. |
 | FEAT-003 | Functional | Track income separately for the user and girlfriend, and support a combined household income view. The spreadsheet mapping is D (blue) = user and C (pink) = girlfriend. Income is one amount per partner per month; a second amount for the same partner and month is rejected. |
-| FEAT-004 | Functional | Use the expense categories and non-Groceries subcategories found in the workbook. Omit Groceries subcategories for the initial scope. A subcategory is optional even where the category has subcategories. The workbook's `Eat_out` category is shown as "Eat out"; other labels are kept as in the workbook. |
+| FEAT-004 | Functional | Use the expense categories and non-Groceries subcategories found in the workbook. Omit Groceries subcategories for the initial scope. Manual expenses exclude the flagged bill category and require a subcategory when the category has subcategories; categories without subcategories need none. The workbook's `Eat_out` category is shown as "Eat out"; other labels are kept as in the workbook. |
 | FEAT-005 | Functional | Support monthly budgets per expense category and show a free in-app warning when actual spending reaches 80% of a category limit. Show an exceeded state above 100%. |
-| FEAT-006 | Functional | Allow one-off bills and monthly recurring bills to be registered with pending or paid status and a due date. Recurring bills provide a default amount that can be adjusted for each occurrence before payment. Show pending/overdue bills in the app without paid email, SMS, or push services. A bill contributes to actual expenses and budgets only when marked paid, using its paid amount and paid date. |
+| FEAT-006 | Functional | Allow one-off bills and monthly recurring bills with a required subcategory stored under the bill category, pending or paid status and a due date. The initial subcategories are Water, Electricity, Heating, Home Internet, and Phone Plan. Recurring bills provide a default amount that can be adjusted for each occurrence before payment. Show pending/overdue bills in the app without paid email, SMS, or push services. A bill contributes to actual expenses and budgets only when marked paid, using its paid amount and paid date. Bill-category records are excluded from the expense list but retained in totals. |
 | FEAT-007 | Functional | Provide monthly household summaries with combined income, combined expenses, and the remaining balance (income minus expenses). |
 | FEAT-008 | Functional | Each partner has a label shown in the app. The defaults are "Azul" for the user and "Pinketa" for the girlfriend, and either label can be changed through the UI. |
 | TECH-001 | Technology constraint | Use Angular for the frontend. |
@@ -46,13 +46,13 @@ Source: `Pingvinukas_Coins.xlsx` in the parent workspace directory (outside this
 
 ## Scope and Boundaries
 
-- Confirmed: dated household expenses that cannot be in the future; one income amount per partner per month; partner labels that can be changed in the UI; combined household expense totals; categories and subcategories copied from the workbook except Groceries subcategories, with the subcategory optional; EUR; monthly summaries; a single ledger page; monthly budgets per category with an in-app warning at 80%; and one-off or monthly recurring bills with pending/paid state, in-app pending/overdue visibility, and expense accounting only on the paid date.
+- Confirmed: dated household expenses that cannot be in the future; one income amount per partner per month; partner labels that can be changed in the UI; combined household expense totals; workbook categories and subcategories except Groceries subcategories; required subcategories where available; Bills entered only through the bill form and hidden from the expense list; EUR; monthly summaries; a tabbed ledger; monthly budgets per category with an in-app warning at 80%; and one-off or monthly recurring bills with pending/paid state, in-app pending/overdue visibility, and expense accounting only on the paid date.
 - Not confirmed: whether expenses and income can be edited/deleted; required transaction metadata beyond date, amount, and category; income dates and sources beyond one monthly amount per partner; and account/access and deployment model.
 - Treat spreadsheet sample values and formulas as reference data, not as requirements. In particular, do not carry over spreadsheet formula behavior without confirming the desired calculations.
 
 ## Acceptance Criteria
 
-- A user can record an expense with an actual date that is not in the future, EUR amount, and applicable workbook category and optional subcategory; it contributes to shared household expense totals rather than an individual partner's total, in the month of its transaction date.
+- A user can record a manual expense with an actual date that is not in the future, EUR amount, and non-Bills category; a subcategory is required when available. It contributes to shared household expense totals rather than an individual partner's total, in the month of its transaction date.
 - A user can record one income amount per month for either partner and view the two partner-specific amounts separately and together. A second amount for the same partner and month is rejected with a clear message.
 - A user can change either partner's label; the defaults are "Azul" and "Pinketa".
 - Expense categories match the workbook, with `Eat_out` shown as "Eat out"; Groceries has no subcategory selection in the initial version.
@@ -79,9 +79,9 @@ Angular application -> FastAPI REST API -> PostgreSQL
 - Keep the backend as one modular application; no microservices are warranted by the current scope.
 - Authentication, hosting, and deployment topology are not selected because the access model and operating environment are not yet known.
 
-### Issue #2 ledger design
+### Issue #2 ledger design (historical)
 
-Decisions confirmed with the user on 2026-11-21 before implementation:
+Decisions confirmed with the user on 2026-11-21 before implementation; the subcategory and layout decisions were superseded by issues #16 and #15 respectively:
 
 | Decision | Choice |
 | --- | --- |
@@ -107,8 +107,8 @@ API:
 | `GET /categories` | Categories in workbook order, each with its subcategories. |
 | `GET /members` | The two partners with their labels. |
 | `PATCH /members/{id}` | Change a partner's label (trimmed, 1-50 characters). |
-| `POST /expenses` | Record an expense; validates date, amount, category, and that a subcategory belongs to the category. |
-| `GET /expenses?month=YYYY-MM` | Expenses whose transaction date is in the month, newest first. |
+| `POST /expenses` | Record a non-Bills expense; validates date, amount, category, and the required subcategory when available. |
+| `GET /expenses?month=YYYY-MM` | Non-Bills expenses whose transaction date is in the month, newest first; Bills records remain in totals and budgets. |
 | `POST /incomes` | Record a partner's income for a month; `409` if one already exists. |
 | `GET /incomes?month=YYYY-MM` | Incomes recorded for the month. |
 | `GET /summary?month=YYYY-MM` | Each partner's income (or none), combined income, combined expenses, balance, and category budget progress. |
@@ -125,13 +125,13 @@ Not part of issue #2: editing or deleting records, description/payee, income dat
 | Household | The shared financial scope of the two partners. |
 | Member / partner | One of the two people in the household. Income belongs to a member; expenses do not. |
 | Label | The name shown for a member; "Azul" and "Pinketa" by default. |
-| Expense | A dated EUR amount in a category, optionally with a subcategory, shared by the household. |
+| Expense | A dated EUR amount in a category shared by the household. New manual expenses require a subcategory when available; paid bills create internal Bills expenses. Historical entries may lack a subcategory. |
 | Transaction date | The actual date of an expense; it decides which month the expense counts towards. |
 | Income | One EUR amount for one member for one month. |
 | Month | A calendar month, written `YYYY-MM`. |
 | Combined income | The sum of both members' incomes for a month. |
 | Remaining balance | Combined income minus combined expenses for a month; it can be negative. |
-| Category / subcategory | The expense classification taken from the workbook. |
+| Category / subcategory | The expense classification taken from the workbook. `is_bill_category` identifies the bill category independently of its name; at most one category can have the flag. |
 | Bill occurrence | One scheduled instance of a bill, with a due date and an adjustable amount. |
 | Overdue | An unpaid bill occurrence whose due date is before today. |
 
@@ -141,11 +141,11 @@ Domain concepts. Household, member, expense, income, and category behavior is im
 
 - **Household:** the shared financial scope. It is implicit: the application serves one household, so there is no household record.
 - **Member:** one of the two partners, with a changeable label; income is associated with a member.
-- **Expense:** dated EUR amount and category, optionally a subcategory where that category has subcategories. It belongs to the household and is not assigned to a member.
+- **Expense:** dated EUR amount and category, with a required subcategory for new manual entries when the category has them. Bills payments create internal Bills expenses; historical records may lack subcategories. It belongs to the household and is not assigned to a member.
 - **Income:** EUR amount associated with one member for one month; at most one per member and month.
-- **Category / subcategory:** the expense classification from the workbook, except Groceries subcategories are omitted initially.
+- **Category / subcategory:** the expense classification from the workbook, except Groceries subcategories are omitted initially. A category's `is_bill_category` flag identifies the single bill category independently of its display name.
 - **Budget:** a monthly spending limit for an expense category; show an in-app warning at 80% and an exceeded state above 100%.
-- **Bill:** a one-off or monthly recurring payable item with due date and pending or paid status. A recurring occurrence starts with the schedule's default amount, which can be adjusted; only its paid amount contributes to actual expenses, on its paid date.
+- **Bill:** a one-off or monthly recurring payable item with a required stored subcategory of the bill category, due date and pending or paid status. A recurring occurrence starts with the schedule's default amount, which can be adjusted; only its paid amount contributes to actual expenses, on its paid date.
 - **Recurring bill:** a monthly schedule that produces pending bill occurrences; pending and overdue occurrences are shown in-app without external notifications.
 
 Data model implemented by issue #2:
@@ -164,6 +164,7 @@ erDiagram
 		int id PK
 		string name UK
 		int position
+		boolean is_bill_category
 	}
 	SUBCATEGORIES {
 		int id PK
@@ -194,8 +195,8 @@ sequenceDiagram
 	participant UI as Angular UI
 	participant API as FastAPI
 	participant DB as PostgreSQL
-	Partner->>UI: Enter date, EUR amount, category, optional subcategory
-	UI->>UI: Validate date and amount
+	Partner->>UI: Enter date, EUR amount, non-Bills category and required subcategory when available
+	UI->>UI: Validate date, amount and classification
 	UI->>API: POST /expenses
 	API->>API: Validate date, amount, category, subcategory
 	alt Invalid entry
@@ -254,12 +255,13 @@ sequenceDiagram
 | [#2 Implement household expense and income ledger](https://github.com/miguellemos95/household_finances/issues/2) | Shared dated expenses, per-partner monthly income, changeable partner labels, workbook categories, and monthly summary. Depends on #1. | Completed and verified; merged in PR [#6](https://github.com/miguellemos95/household_finances/pull/6) on 2026-11-21; issue closed |
 | [#3 Add monthly category budgets and in-app alerts](https://github.com/miguellemos95/household_finances/issues/3) | Monthly category budgets with in-app 80% warning and over-budget state. Depends on #2. | Closed after PR [#8](https://github.com/miguellemos95/household_finances/pull/8) merged |
 | [#4 Add one-off and recurring bill tracking](https://github.com/miguellemos95/household_finances/issues/4) | One-off/monthly bills, due dates, pending/paid lifecycle, adjustable occurrences, and paid-date expense accounting. Depends on #2 and #3. | Closed after PR [#13](https://github.com/miguellemos95/household_finances/pull/13) merged into `master`; bill tests rechecked |
+| [#16 Require appropriate categories for expenses and bills](https://github.com/miguellemos95/household_finances/issues/16) | Required classification, bill entry, and excluding bill-category expenses from the expense list without changing totals. | Classification redesign locally verified; pending review and merge |
 
 Issue #4 follow-up: the user approved adding bill subcategory selection, concurrency-safe occurrence generation and payment, and targeted acceptance/error tests. These fixes and the earlier bill work were merged to `master` in PR #13. GitHub closed issue #4; post-merge PostgreSQL bill tests and frontend tests passed.
 
-### Bill follow-up design
+### Bill follow-up design (historical)
 
-The UI offers the selected category's optional subcategories and clears the choice when the category changes. The API locks the bill row while generating recurring occurrences, and locks each occurrence before adjusting or paying it. Payment and its shared expense are committed together; a competing payment observes the paid state and returns a conflict. Pending versus overdue is calculated on read instead of writing a potentially stale status. Monthly dates use the original due day, clamped to the last day of shorter months.
+The original UI offered optional subcategories for any category; issue #16 supersedes that classification behavior. The API locks the bill row while generating recurring occurrences, and locks each occurrence before adjusting or paying it. Payment and its shared expense are committed together; a competing payment observes the paid state and returns a conflict. Pending versus overdue is calculated on read instead of writing a potentially stale status. Monthly dates use the original due day, clamped to the last day of shorter months.
 
 ```mermaid
 erDiagram
@@ -294,7 +296,7 @@ sequenceDiagram
 
 ## Tests and Failover
 
-The consolidated "failover" table primarily covers application error handling; infrastructure failover is out of scope. The following table records #1 (`FND`) and #2 (`LED`) outcomes. Do not report unexecuted checks as passed.
+The consolidated "failover" table primarily covers application error handling; infrastructure failover is out of scope. These are historical outcomes for the behavior at the time, not evidence that superseded rules were rerun. Issue #16's current evidence is in [Expense and bill categorization](expense-bill-categorization.md).
 
 | Test ID | Requirement / acceptance criterion | Level | Scenario / failure condition | Expected outcome / recovery | Actual outcome | Status | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
