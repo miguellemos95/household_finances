@@ -544,3 +544,108 @@ def test_failed_budget_write_is_reported_and_not_stored(
         if item["category"]["name"] == "Bills"
     )
     assert bills["limit"] is None
+
+
+def test_one_off_bill_stays_unpaid_and_is_paid_once(api: Api) -> None:
+    category = category_reference(api, "Bills", "Water")
+    created = api(
+        "POST",
+        "/bills",
+        json={
+            "recurrence": "one_off",
+            "due_date": "2025-12-20",
+            "amount": "45.00",
+            **category,
+        },
+    )
+    assert created.status_code == 201
+    assert read_month(api, "/summary", "2025-12")["total_expenses"] == "0.00"
+
+    pending = next(
+        item for item in read_month(api, "/bills", "2025-12")
+        if item["due_date"] == "2025-12-20"
+    )
+    assert pending["status"] == "pending"
+    assert pending["amount"] == "45.00"
+
+    adjusted = api(
+        "PUT",
+        f"/bills/occurrences/{pending['id']}/amount",
+        json={"amount": "43.25"},
+    )
+    assert adjusted.status_code == 200
+    assert adjusted.json()["amount"] == "43.25"
+
+    paid = api(
+        "POST",
+        f"/bills/occurrences/{pending['id']}/pay",
+        json={"paid_amount": "43.25", "paid_date": "2025-12-14"},
+    )
+    assert paid.status_code == 200
+    assert paid.json()["status"] == "paid"
+    assert paid.json()["paid_amount"] == "43.25"
+    assert paid.json()["paid_date"] == "2025-12-14"
+    assert read_month(api, "/summary", "2025-12")["total_expenses"] == "43.25"
+    assert read_month(api, "/expenses", "2025-12")[0]["amount"] == "43.25"
+
+    repeated = api(
+        "POST",
+        f"/bills/occurrences/{pending['id']}/pay",
+        json={"paid_amount": "43.25", "paid_date": "2025-12-14"},
+    )
+    assert repeated.status_code == 409
+    assert read_month(api, "/summary", "2025-12")["total_expenses"] == "43.25"
+
+
+def test_monthly_bill_generates_occurrences_and_adjusted_amount(api: Api) -> None:
+    category = category_reference(api, "Bills", "Home Internet")
+    created = api(
+        "POST",
+        "/bills",
+        json={
+            "recurrence": "monthly",
+            "due_date": "2025-10-31",
+            "amount": "40.00",
+            **category,
+        },
+    )
+    assert created.status_code == 201
+
+    november = read_month(api, "/bills", "2025-11")
+    assert any(
+        item["due_date"] == "2025-11-30"
+        and item["amount"] == "40.00"
+        for item in november
+    )
+    assert any(item["due_date"] == "2025-10-31" for item in november)
+
+    december = read_month(api, "/bills", "2025-12")
+    assert any(item["due_date"] == "2025-12-31" for item in december)
+
+
+def test_overdue_bill_and_invalid_payment_are_reported(api: Api) -> None:
+    category = category_reference(api, "Bills", "Heating")
+    created = api(
+        "POST",
+        "/bills",
+        json={
+            "recurrence": "one_off",
+            "due_date": "2025-12-10",
+            "amount": "80.00",
+            **category,
+        },
+    )
+    occurrence = next(
+        item for item in read_month(api, "/bills", "2025-12")
+        if item["id"] >= 1
+    )
+    assert created.status_code == 201
+    assert occurrence["status"] == "overdue"
+
+    future = api(
+        "POST",
+        f"/bills/occurrences/{occurrence['id']}/pay",
+        json={"paid_amount": "80.00", "paid_date": "2025-12-16"},
+    )
+    assert_invalid(future, "paid_date")
+    assert read_month(api, "/summary", "2025-12")["total_expenses"] == "0.00"

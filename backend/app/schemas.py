@@ -95,3 +95,40 @@ class MonthlySummary(BaseModel):
     total_expenses: Decimal
     balance: Decimal
     category_budgets: list[CategoryBudgetRead]
+
+
+class BillCreate(BaseModel):
+    recurrence: str
+    due_date: date
+    amount: Amount
+    category_id: EntityId
+    subcategory_id: EntityId | None = None
+
+
+class BillRead(ReadModel):
+    id: int
+    recurrence: str
+    first_due_date: date
+    due_day: int | None
+    default_amount: Decimal
+    category: NamedReference
+    subcategory: NamedReference | None
+
+
+class BillOccurrenceRead(ReadModel):
+    id: int
+    bill: BillRead
+    due_date: date
+    amount: Decimal
+    status: str
+    paid_amount: Decimal | None
+    paid_date: date | None
+
+
+class BillOccurrenceAmount(BaseModel):
+    amount: Amount
+
+
+class BillPay(BaseModel):
+    paid_amount: Amount
+    paid_date: date

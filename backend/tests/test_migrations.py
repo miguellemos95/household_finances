@@ -24,6 +24,8 @@ def test_clean_database_is_migrated_to_the_latest_revision(
         "expenses",
         "incomes",
         "category_budgets",
+        "bills",
+        "bill_occurrences",
     } <= tables
 
 
