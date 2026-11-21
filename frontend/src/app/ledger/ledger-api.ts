@@ -57,6 +57,34 @@ export interface CategoryBudget {
   state: 'unset' | 'under' | 'warning' | 'exceeded';
 }
 
+export interface Bill {
+  id: number;
+  recurrence: 'one_off' | 'monthly';
+  first_due_date: string;
+  due_day: number | null;
+  default_amount: string;
+  category: NamedReference;
+  subcategory: NamedReference | null;
+}
+
+export interface BillOccurrence {
+  id: number;
+  bill: Bill;
+  due_date: string;
+  amount: string;
+  status: 'pending' | 'overdue' | 'paid';
+  paid_amount: string | null;
+  paid_date: string | null;
+}
+
+export interface NewBill {
+  recurrence: 'one_off' | 'monthly';
+  due_date: string;
+  amount: string;
+  category_id: number;
+  subcategory_id: number | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class LedgerApi {
   private readonly http = inject(HttpClient);
@@ -92,5 +120,26 @@ export class LedgerApi {
       { amount },
       { params: { month } },
     );
+  }
+
+  getBills(month: string): Observable<BillOccurrence[]> {
+    return this.http.get<BillOccurrence[]>(`${this.baseUrl}/bills`, { params: { month } });
+  }
+
+  recordBill(bill: NewBill): Observable<Bill> {
+    return this.http.post<Bill>(`${this.baseUrl}/bills`, bill);
+  }
+
+  adjustBillAmount(id: number, amount: string): Observable<BillOccurrence> {
+    return this.http.put<BillOccurrence>(`${this.baseUrl}/bills/occurrences/${id}/amount`, {
+      amount,
+    });
+  }
+
+  payBill(id: number, paidAmount: string, paidDate: string): Observable<BillOccurrence> {
+    return this.http.post<BillOccurrence>(`${this.baseUrl}/bills/occurrences/${id}/pay`, {
+      paid_amount: paidAmount,
+      paid_date: paidDate,
+    });
   }
 }

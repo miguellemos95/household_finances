@@ -4,14 +4,22 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subject, catchError, forkJoin, map, of, switchMap } from 'rxjs';
 import { describeApiError } from './api-error';
 import { ExpenseForm } from './expense-form';
-import { Category, CategoryBudget, Expense, LedgerApi, MonthlySummary } from './ledger-api';
-import { formatMonth, isMonth, shiftMonth, toMonth } from './month';
+import {
+  BillOccurrence,
+  Category,
+  CategoryBudget,
+  Expense,
+  LedgerApi,
+  MonthlySummary,
+} from './ledger-api';
+import { formatMonth, isMonth, shiftMonth, toIsoDate, toMonth } from './month';
 import { PartnerIncome } from './partner-income';
 
 interface MonthLedger {
   categories: Category[];
   summary: MonthlySummary;
   expenses: Expense[];
+  bills: BillOccurrence[];
 }
 
 @Component({
@@ -34,6 +42,9 @@ export class LedgerPage implements OnInit {
   protected readonly loadError = signal<string | null>(null);
   protected readonly budgetError = signal<string | null>(null);
   protected readonly budgetSaved = signal(false);
+  protected readonly billError = signal<string | null>(null);
+  protected readonly billSaved = signal(false);
+  protected readonly today = toIsoDate(new Date());
 
   constructor() {
     this.loads
@@ -43,6 +54,7 @@ export class LedgerPage implements OnInit {
             categories: this.api.getCategories(),
             summary: this.api.getSummary(month),
             expenses: this.api.getExpenses(month),
+            bills: this.api.getBills(month),
           }).pipe(
             map((ledger) => ({ ledger, error: null })),
             catchError((error: unknown) => of({ ledger: null, error: describeApiError(error) })),
@@ -112,5 +124,74 @@ export class LedgerPage implements OnInit {
 
   protected budgetProgress(budget: CategoryBudget): number {
     return Math.min(Number(budget.percent), 100);
+  }
+
+  protected recordBill(
+    recurrence: HTMLSelectElement,
+    dueDate: HTMLInputElement,
+    amount: HTMLInputElement,
+    category: HTMLSelectElement,
+  ): void {
+    const parsedAmount = amount.value.trim().replace(',', '.');
+    const categoryId = Number(category.value);
+    if (
+      !dueDate.value ||
+      !/^\d+(?:\.\d{1,2})?$/.test(parsedAmount) ||
+      Number(parsedAmount) <= 0 ||
+      categoryId <= 0
+    ) {
+      this.billError.set('Enter a due date, an amount greater than 0 and a category.');
+      this.billSaved.set(false);
+      return;
+    }
+    this.api
+      .recordBill({
+        recurrence: recurrence.value as 'one_off' | 'monthly',
+        due_date: dueDate.value,
+        amount: parsedAmount,
+        category_id: categoryId,
+        subcategory_id: null,
+      })
+      .subscribe({
+        next: () => {
+          this.billError.set(null);
+          this.billSaved.set(true);
+          this.reload();
+        },
+        error: (error: unknown) => {
+          this.billError.set(describeApiError(error));
+          this.billSaved.set(false);
+        },
+      });
+  }
+
+  protected adjustBillAmount(bill: BillOccurrence, amountInput: HTMLInputElement): void {
+    const amount = amountInput.value.trim().replace(',', '.');
+    if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
+      this.billError.set('Enter a bill amount greater than 0.');
+      return;
+    }
+    this.api.adjustBillAmount(bill.id, amount).subscribe({
+      next: () => {
+        this.billError.set(null);
+        this.reload();
+      },
+      error: (error: unknown) => this.billError.set(describeApiError(error)),
+    });
+  }
+
+  protected payBill(
+    bill: BillOccurrence,
+    amountInput: HTMLInputElement,
+    dateInput: HTMLInputElement,
+  ): void {
+    this.api.payBill(bill.id, amountInput.value, dateInput.value).subscribe({
+      next: () => {
+        this.billError.set(null);
+        this.billSaved.set(true);
+        this.reload();
+      },
+      error: (error: unknown) => this.billError.set(describeApiError(error)),
+    });
   }
 }

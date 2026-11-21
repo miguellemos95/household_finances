@@ -19,6 +19,11 @@ from app.schemas import (
     MemberRead,
     MemberRename,
     MonthlySummary,
+    BillCreate,
+    BillRead,
+    BillOccurrenceAmount,
+    BillOccurrenceRead,
+    BillPay,
 )
 
 router = APIRouter(tags=["ledger"])
@@ -89,4 +94,35 @@ def set_budget(
 ):
     return ledger_service.set_category_budget(
         session, category_id, month, change.amount
+    )
+
+
+@router.post("/bills", response_model=BillRead, status_code=201)
+def create_bill(entry: BillCreate, session: SessionDependency, today: Annotated[date, Depends(get_today)]):
+    return ledger_service.create_bill(session, entry, today)
+
+
+@router.get("/bills", response_model=list[BillOccurrenceRead])
+def read_bills(month: MonthQuery, session: SessionDependency, today: Annotated[date, Depends(get_today)]):
+    return ledger_service.list_bill_occurrences(session, month, today)
+
+
+@router.put("/bills/occurrences/{occurrence_id}/amount", response_model=BillOccurrenceRead)
+def adjust_bill_amount(
+    occurrence_id: Annotated[int, Path(ge=1, le=MAX_ENTITY_ID)],
+    change: BillOccurrenceAmount,
+    session: SessionDependency,
+):
+    return ledger_service.adjust_bill_occurrence(session, occurrence_id, change.amount)
+
+
+@router.post("/bills/occurrences/{occurrence_id}/pay", response_model=BillOccurrenceRead)
+def pay_bill(
+    occurrence_id: Annotated[int, Path(ge=1, le=MAX_ENTITY_ID)],
+    change: BillPay,
+    session: SessionDependency,
+    today: Annotated[date, Depends(get_today)],
+):
+    return ledger_service.pay_bill_occurrence(
+        session, occurrence_id, change.paid_amount, change.paid_date, today
     )
