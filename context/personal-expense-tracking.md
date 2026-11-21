@@ -111,7 +111,8 @@ API:
 | `GET /expenses?month=YYYY-MM` | Expenses whose transaction date is in the month, newest first. |
 | `POST /incomes` | Record a partner's income for a month; `409` if one already exists. |
 | `GET /incomes?month=YYYY-MM` | Incomes recorded for the month. |
-| `GET /summary?month=YYYY-MM` | Each partner's income (or none), combined income, combined expenses, and balance. |
+| `GET /summary?month=YYYY-MM` | Each partner's income (or none), combined income, combined expenses, balance, and category budget progress. |
+| `PUT /budgets/{category_id}?month=YYYY-MM` | Set or update a positive EUR limit for a category and month. |
 
 Frontend structure (`frontend/src/app`): the `App` shell keeps the API status and hosts the routed `LedgerPage`, which loads the month and composes `PartnerIncome` (label and monthly income per partner) and `ExpenseForm`. Amounts are kept as text between the form and the API so no floating-point arithmetic touches a money value. After an expense is recorded the page shows the month of that expense, so the updated total is visible.
 
@@ -249,7 +250,7 @@ sequenceDiagram
 | --- | --- | --- |
 | [#1 Scaffold Angular, FastAPI, and PostgreSQL foundation](https://github.com/miguellemos95/household_finances/issues/1) | Local app/API/database foundation, health/readiness, migrations, startup documentation, and test setup. | Completed and closed; PostgreSQL integration verified |
 | [#2 Implement household expense and income ledger](https://github.com/miguellemos95/household_finances/issues/2) | Shared dated expenses, per-partner monthly income, changeable partner labels, workbook categories, and monthly summary. Depends on #1. | Completed and verified; merged in PR [#6](https://github.com/miguellemos95/household_finances/pull/6) on 2026-11-21; issue closed |
-| [#3 Add monthly category budgets and in-app alerts](https://github.com/miguellemos95/household_finances/issues/3) | Monthly category budgets with in-app 80% warning and over-budget state. Depends on #2. | Registered |
+| [#3 Add monthly category budgets and in-app alerts](https://github.com/miguellemos95/household_finances/issues/3) | Monthly category budgets with in-app 80% warning and over-budget state. Depends on #2. | Implementation complete; acceptance checks passing; PR pending |
 | [#4 Add one-off and recurring bill tracking](https://github.com/miguellemos95/household_finances/issues/4) | One-off/monthly bills, due dates, pending/paid lifecycle, adjustable occurrences, and paid-date expense accounting. Depends on #2 and #3. | Registered |
 
 The user's request to register these issues and begin implementation authorized #1; the user's request on 2026-11-21 to work on #2 authorized #2. Do not start #3-#4 until their dependencies and remaining product questions are addressed.
@@ -289,3 +290,9 @@ The consolidated "failover" table primarily covers application error handling; i
 | LED-022 | #2 controlled errors end to end; NFR-004 | Manual smoke in a browser / error path | Stop the API, then add an expense and change month | "The expense was not saved" with no confirmation and unchanged totals; "The ledger could not be loaded" with a retry and no figures | As expected on 2026-11-21 | Passed | Browser session against `http://localhost:4200` |
 | LED-023 | #2 prevent stale figures during month navigation; NFR-002 | Component / regression | Navigate to another month while its requests are pending | Hide the previous month's summary and show a loading status until the new ledger arrives | As expected | Passed | `frontend/src/app/ledger/ledger-page.spec.ts` |
 | LED-024 | #2 frontend/documentation formatting; NFR-001 | Formatter | Run Prettier check on the feature, app shell, styles, and README | All checked files pass Prettier | As expected | Passed | `npx prettier --check` |
+| BGT-001 | #3 set and view category budgets; FEAT-005 | API | Set November and December budgets for the same category and update November | November and December retain separate limits; a repeated November write updates the limit | As expected | Passed | `test_budget_can_be_viewed_and_updated_for_each_month` |
+| BGT-002 | #3 alert boundaries; FEAT-005 | API | Category spend at 79.99%, 80%, 100%, and 100.01% of a 100 EUR limit | `under`, `warning`, `warning`, and `exceeded` respectively | Boundary test passes | Passed | `test_category_budget_boundaries` |
+| BGT-003 | #3 invalid budgets; FEAT-005 | API / error path | Unknown category, malformed month, zero, negative, or three-decimal amount | `422 invalid_input` names the relevant field; no budget stored | As expected | Passed | `test_invalid_budget_is_rejected` |
+| BGT-004 | #3 storage failures; NFR-004 | API / error path | Budget commit fails | Sanitized `503 database_unavailable`; no budget is stored | As expected | Passed | `test_failed_budget_write_is_reported_and_not_stored` |
+| BGT-005 | #3 ledger UI; FEAT-005 | Component | Set a limit, show warning at 80%, and show exceeded above 100% | Budget saves and refreshes; warning and exceeded labels/percentages are visible | 28 frontend tests pass | Passed | `ledger-page.spec.ts` |
+| BGT-006 | #3 migration and regression | Integration / automated | Run migrations, full backend suite, frontend suite, and production build | Migration `0003_category_budgets` applies; all tests and build pass | 71 backend tests passed on SQLite; 28 frontend tests passed; Angular build and Prettier checks passed | Passed | `python -m pytest`; `npm test -- --watch=false`; `npm run build`; `npx prettier --check` |

@@ -66,3 +66,16 @@ class Income(Base):
     member_id: Mapped[int] = mapped_column(ForeignKey("members.id"))
     month: Mapped[date]
     amount: Mapped[Decimal] = mapped_column(Numeric(AMOUNT_PRECISION, AMOUNT_SCALE))
+
+
+class CategoryBudget(Base):
+    __tablename__ = "category_budgets"
+    __table_args__ = (
+        UniqueConstraint("category_id", "month", name="uq_category_budgets_category_month"),
+        CheckConstraint("amount > 0", name="ck_category_budgets_amount_positive"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
+    month: Mapped[date]
+    amount: Mapped[Decimal] = mapped_column(Numeric(AMOUNT_PRECISION, AMOUNT_SCALE))

@@ -45,6 +45,16 @@ export interface MonthlySummary {
   total_income: string;
   total_expenses: string;
   balance: string;
+  category_budgets: CategoryBudget[];
+}
+
+export interface CategoryBudget {
+  category: NamedReference;
+  month: string;
+  limit: string | null;
+  spent: string;
+  percent: string;
+  state: 'unset' | 'under' | 'warning' | 'exceeded';
 }
 
 @Injectable({ providedIn: 'root' })
@@ -74,5 +84,13 @@ export class LedgerApi {
 
   renameMember(memberId: number, name: string): Observable<NamedReference> {
     return this.http.patch<NamedReference>(`${this.baseUrl}/members/${memberId}`, { name });
+  }
+
+  setBudget(categoryId: number, month: string, amount: string): Observable<CategoryBudget> {
+    return this.http.put<CategoryBudget>(
+      `${this.baseUrl}/budgets/${categoryId}`,
+      { amount },
+      { params: { month } },
+    );
   }
 }

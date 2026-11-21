@@ -88,5 +88,6 @@ Amounts are EUR decimal strings with up to two decimals, for example `"12.36"`. 
 | `POST /incomes` | Record a partner's income for a month with `member_id`, `month` and `amount`; one per partner per month. |
 | `GET /incomes?month=` | Incomes recorded for the month. |
 | `GET /summary?month=` | Each partner's income, combined income, combined expenses and remaining balance. |
+| `PUT /budgets/{category_id}?month=YYYY-MM` | Set or update a category budget for a month. |
 
 Errors use `{"detail": {"code", "message", "errors"?}}`: `422 invalid_input` for invalid values, `404 not_found`, `409 conflict` for a second income for the same partner and month, and a sanitized `503 database_unavailable` when storage fails. A failed write is rolled back.

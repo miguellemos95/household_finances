@@ -17,7 +17,14 @@ def test_clean_database_is_migrated_to_the_latest_revision(
     engine.dispose()
 
     assert revision == ScriptDirectory.from_config(alembic_config).get_current_head()
-    assert {"members", "categories", "subcategories", "expenses", "incomes"} <= tables
+    assert {
+        "members",
+        "categories",
+        "subcategories",
+        "expenses",
+        "incomes",
+        "category_budgets",
+    } <= tables
 
 
 def test_models_do_not_drift_from_migrations(

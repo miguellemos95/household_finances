@@ -8,9 +8,22 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import commit
 from app.errors import ConflictError, InvalidEntryError, NotFoundError
-from app.models import Category, Expense, Income, Member, Subcategory
+from app.models import (
+    Category,
+    CategoryBudget,
+    Expense,
+    Income,
+    Member,
+    Subcategory,
+)
 from app.months import month_bounds
-from app.schemas import ExpenseCreate, IncomeCreate, MemberIncome, MonthlySummary
+from app.schemas import (
+    CategoryBudgetRead,
+    ExpenseCreate,
+    IncomeCreate,
+    MemberIncome,
+    MonthlySummary,
+)
 
 ZERO = Decimal("0.00")
 
@@ -113,13 +126,86 @@ def get_monthly_summary(session: Session, month: date) -> MonthlySummary:
     total_expenses = (
         session.scalar(select(func.sum(Expense.amount)).where(_in_month(month))) or ZERO
     )
+    category_budgets = list_category_budgets(session, month)
     return MonthlySummary(
         month=month,
         incomes=incomes,
         total_income=total_income,
         total_expenses=total_expenses,
         balance=total_income - total_expenses,
+        category_budgets=category_budgets,
     )
+
+
+def set_category_budget(
+    session: Session, category_id: int, month: date, amount: Decimal
+) -> CategoryBudgetRead:
+    category = session.get(Category, category_id)
+    if category is None:
+        raise InvalidEntryError("Category does not exist.", field="category_id")
+
+    budget = session.scalar(
+        select(CategoryBudget).where(
+            CategoryBudget.category_id == category_id,
+            CategoryBudget.month == month,
+        )
+    )
+    if budget is None:
+        budget = CategoryBudget(category_id=category_id, month=month, amount=amount)
+        session.add(budget)
+    else:
+        budget.amount = amount
+    commit(session)
+
+    return next(
+        item
+        for item in list_category_budgets(session, month)
+        if item.category.id == category_id
+    )
+
+
+def list_category_budgets(session: Session, month: date) -> list[CategoryBudgetRead]:
+    categories = list_categories(session)
+    budgets = {
+        budget.category_id: budget.amount
+        for budget in session.scalars(
+            select(CategoryBudget).where(CategoryBudget.month == month)
+        ).all()
+    }
+    spent_rows = session.execute(
+        select(Expense.category_id, func.sum(Expense.amount))
+        .where(_in_month(month))
+        .group_by(Expense.category_id)
+    ).all()
+    spent = {category_id: amount for category_id, amount in spent_rows}
+
+    result: list[CategoryBudgetRead] = []
+    for category in categories:
+        limit = budgets.get(category.id)
+        actual = spent.get(category.id, ZERO)
+        if limit is None:
+            percent = ZERO
+            state = "unset"
+        else:
+            percent = (actual * Decimal("100") / limit).quantize(Decimal("0.01"))
+            state = (
+                "exceeded"
+                if actual > limit
+                else "warning"
+                if actual * Decimal("100") >= limit * Decimal("80")
+                else "under"
+            )
+        result.append(
+            CategoryBudgetRead(
+                category={"id": category.id, "name": category.name},
+                month=month,
+                limit=limit,
+                spent=actual,
+                percent=percent,
+                state=state,
+            )
+        )
+    return result
 
 
 def _in_month(month: date) -> ColumnElement[bool]:
