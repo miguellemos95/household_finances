@@ -3,8 +3,9 @@
 ## Status
 
 Requirements confirmed; [issue #16](https://github.com/miguellemos95/household_finances/issues/16)
-registered. Issue #15 is merged and closed. The agreed flag-based redesign is
-implemented and locally verified on the issue branch, pending review and merge.
+registered. Issue #15 is merged and closed. The flag-based redesign was merged
+in [PR #18](https://github.com/miguellemos95/household_finances/pull/18), and
+issue #16 was closed. Post-merge verification is recorded below.
 
 ## Confirmed classification redesign
 
@@ -153,3 +154,12 @@ Regression commands: backend `python -m pytest -q`: 105 passed, 2 PostgreSQL-onl
 tests skipped; frontend `npm test -- --watch=false`: 59 passed; `npm run build`:
 passed. Pylance reported no errors in the changed backend files. No live browser
 check was performed. Infrastructure failover is out of scope.
+
+### Post-merge verification
+
+On 2026-11-24, the merged `master` tree matched the tested implementation.
+Backend tests passed (105 passed, 2 PostgreSQL-only concurrency tests skipped);
+frontend tests passed (59 passed), as did the production build. The running
+frontend returned HTTP 200, the API reported ready, and its category response
+contained one flagged bill category. The skipped concurrency tests and a live
+browser interaction were not verified in this run.
